@@ -1,0 +1,39 @@
+# Root
+.DS_Store
+.env
+
+# Python / backend
+backend/.env
+backend/.venv/
+backend/.mypy_cache/
+backend/.pytest_cache/
+backend/.ruff_cache/
+backend/.coverage
+backend/htmlcov/
+backend/dist/
+backend/build/
+backend/*.egg-info/
+__pycache__/
+*.pyc
+
+# Node / admin
+admin/.env
+admin/node_modules/
+admin/dist/
+
+# Flutter / mobile
+mobile/.env
+mobile/.dart_tool/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+mobile/.packages
+mobile/pubspec.lock
+mobile/build/
+mobile/android/.gradle/
+mobile/ios/Pods/
+mobile/ios/.symlinks/
+
+# IDE
+.idea/
+.vscode/
+
