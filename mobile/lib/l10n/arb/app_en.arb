@@ -1,0 +1,15 @@
+{
+  "@@locale": "en",
+  "homeTitle": "Starter Home",
+  "homeSubtitle": "This Flutter app is wired for routing, localization, and environment-based configuration. Marketplace features will land in later stages.",
+  "loginTitle": "Login Placeholder",
+  "loginSubtitle": "Authentication UI is intentionally deferred until backend auth endpoints are implemented.",
+  "backToHome": "Back to home",
+  "apiBaseUrlLabel": "API base URL",
+  "routingLabel": "Routing",
+  "routingValue": "go_router is configured for the starter screens.",
+  "scopeLabel": "Current scope",
+  "scopeValue": "Scaffold only. Buyer and seller flows are still ahead.",
+  "openLoginPlaceholder": "Open login placeholder"
+}
+
