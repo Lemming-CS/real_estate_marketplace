@@ -1,0 +1,125 @@
+:root {
+  color-scheme: light;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background:
+    radial-gradient(circle at top left, rgba(88, 129, 87, 0.18), transparent 35%),
+    linear-gradient(180deg, #f6f1e9 0%, #f4f7fb 100%);
+  color: #18212f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  min-height: 100vh;
+}
+
+.sidebar {
+  padding: 2rem;
+  background: rgba(18, 33, 47, 0.92);
+  color: #f5f0e6;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.nav-links {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.nav-links a {
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.main-content {
+  padding: 2rem;
+}
+
+.page-header {
+  max-width: 720px;
+  margin-bottom: 2rem;
+}
+
+.page-copy {
+  color: #4c5b6a;
+  line-height: 1.6;
+}
+
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.75rem;
+  color: #6f7d8a;
+}
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.status-card {
+  padding: 1.25rem;
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(24, 33, 47, 0.08);
+  box-shadow: 0 12px 30px rgba(24, 33, 47, 0.08);
+}
+
+.status-card--info {
+  border-top: 4px solid #3d7ea6;
+}
+
+.status-card--success {
+  border-top: 4px solid #5a8f4d;
+}
+
+.status-card--warning {
+  border-top: 4px solid #d1823a;
+}
+
+.status-card__title {
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #6f7d8a;
+}
+
+.status-card__value {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 900px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    padding-bottom: 1rem;
+  }
+}
