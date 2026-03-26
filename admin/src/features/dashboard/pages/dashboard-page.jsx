@@ -17,7 +17,7 @@ const cards = [
     value: 'Scaffold only. Business features will land in later stages.',
     tone: 'warning',
   },
-] as const;
+];
 
 export function DashboardPage() {
   return (
@@ -39,4 +39,3 @@ export function DashboardPage() {
     </section>
   );
 }
-

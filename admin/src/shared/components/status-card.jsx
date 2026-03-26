@@ -1,10 +1,4 @@
-type StatusCardProps = {
-  title: string;
-  value: string;
-  tone: 'info' | 'success' | 'warning';
-};
-
-export function StatusCard({ title, value, tone }: StatusCardProps) {
+export function StatusCard({ title, value, tone }) {
   return (
     <article className={`status-card status-card--${tone}`}>
       <p className="status-card__title">{title}</p>
@@ -12,4 +6,3 @@ export function StatusCard({ title, value, tone }: StatusCardProps) {
     </article>
   );
 }
-
