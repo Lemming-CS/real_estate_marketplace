@@ -1,10 +1,16 @@
 from fastapi import APIRouter
 
+from app.api.routes.admin.audit_logs import router as admin_audit_logs_router
+from app.api.routes.admin.auth import router as admin_auth_router
 from app.api.routes.admin.categories import router as admin_categories_router
+from app.api.routes.admin.conversations import router as admin_conversations_router
+from app.api.routes.admin.dashboard import router as admin_dashboard_router
 from app.api.routes.admin.listings import router as admin_listings_router
 from app.api.routes.admin.payments import router as admin_payments_router
 from app.api.routes.admin.promotion_packages import router as admin_promotion_packages_router
+from app.api.routes.admin.promotions import router as admin_promotions_router
 from app.api.routes.admin.reports import router as admin_reports_router
+from app.api.routes.admin.users import router as admin_users_router
 from app.api.routes.auth import router as auth_router
 from app.api.routes.categories import router as categories_router
 from app.api.routes.conversations import router as conversations_router
@@ -35,8 +41,14 @@ api_router.include_router(promotions_router)
 api_router.include_router(reports_router)
 api_router.include_router(users_router)
 api_router.include_router(public_users_router)
+api_router.include_router(admin_auth_router)
+api_router.include_router(admin_dashboard_router)
 api_router.include_router(admin_categories_router)
+api_router.include_router(admin_users_router)
 api_router.include_router(admin_listings_router)
 api_router.include_router(admin_payments_router)
 api_router.include_router(admin_promotion_packages_router)
+api_router.include_router(admin_promotions_router)
 api_router.include_router(admin_reports_router)
+api_router.include_router(admin_audit_logs_router)
+api_router.include_router(admin_conversations_router)

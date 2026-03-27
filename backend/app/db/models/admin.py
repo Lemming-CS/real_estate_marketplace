@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from sqlalchemy import ForeignKey, Index, JSON, String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 from app.db.mixins import TimestampMixin
@@ -29,3 +29,5 @@ class AdminAuditLog(TimestampMixin, Base):
     before_json: Mapped[dict | list | None] = mapped_column(JSON, nullable=True)
     after_json: Mapped[dict | list | None] = mapped_column(JSON, nullable=True)
     metadata_json: Mapped[dict | list | None] = mapped_column(JSON, nullable=True)
+
+    actor: Mapped["User | None"] = relationship(foreign_keys=[actor_user_id])

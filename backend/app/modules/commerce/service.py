@@ -4,7 +4,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from math import ceil
 
 from sqlalchemy import Select, func, select
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.core.auth import utcnow
 from app.core.config import Settings
@@ -435,7 +435,7 @@ def _payment_query() -> Select[tuple[PaymentRecord]]:
         .joinedload(Promotion.package),
         joinedload(PaymentRecord.promotion)
         .joinedload(Promotion.target_category)
-        .joinedload(Category.translations),
+        .selectinload(Category.translations),
         joinedload(PaymentRecord.promotion).joinedload(Promotion.listing),
         joinedload(PaymentRecord.payer),
         joinedload(PaymentRecord.listing),
@@ -447,7 +447,7 @@ def _promotion_query() -> Select[tuple[Promotion]]:
         joinedload(Promotion.listing),
         joinedload(Promotion.package),
         joinedload(Promotion.payment_record),
-        joinedload(Promotion.target_category).joinedload(Category.translations),
+        joinedload(Promotion.target_category).selectinload(Category.translations),
     )
 
 
@@ -690,7 +690,7 @@ def _build_payment_schema(
 
 def _mock_checkout_url(*, settings: Settings, payment: PaymentRecord) -> str:
     base_url = settings.mock_payment_checkout_base_url.rstrip("/")
-    return f"{base_url}/payments/{payment.public_id}/simulate?result=successful"
+    return f"{base_url}/payments/{payment.public_id}/checkout?result=successful"
 
 
 def _category_translation_name(category: Category | None) -> str | None:

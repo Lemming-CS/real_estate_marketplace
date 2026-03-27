@@ -8,7 +8,7 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, require_account_status, require_roles
-from app.db.enums import ListingStatus, RoleCode, UserStatus
+from app.db.enums import ListingPurpose, ListingStatus, PropertyType, RoleCode, UserStatus
 from app.db.models import User
 from app.modules.listings.schemas import (
     ListingDetailSchema,
@@ -51,12 +51,19 @@ def _validated_listing_filters(**data) -> ListingQueryParams:
 def moderation_queue(
     q: str | None = Query(default=None),
     category_public_id: str | None = Query(default=None),
+    purpose: ListingPurpose | None = Query(default=None),
+    property_type: PropertyType | None = Query(default=None),
     city: str | None = Query(default=None),
+    district: str | None = Query(default=None),
     min_price: Decimal | None = Query(default=None),
     max_price: Decimal | None = Query(default=None),
+    min_area_sqm: Decimal | None = Query(default=None),
+    max_area_sqm: Decimal | None = Query(default=None),
+    room_count: int | None = Query(default=None, ge=1, le=50),
     status: ListingStatus | None = Query(default=None),
     sort: ListingSortOption = Query(default="newest"),
     promoted_first: bool = Query(default=False),
+    reported_only: bool = Query(default=False),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=50),
     locale: Literal["en", "ru"] = Query(default="en"),
@@ -67,12 +74,19 @@ def moderation_queue(
     filters = _validated_listing_filters(
         query=q,
         category_public_id=category_public_id,
+        purpose=purpose,
+        property_type=property_type,
         city=city,
+        district=district,
         min_price=min_price,
         max_price=max_price,
+        min_area_sqm=min_area_sqm,
+        max_area_sqm=max_area_sqm,
+        room_count=room_count,
         status=status,
         sort=sort,
         promoted_first=promoted_first,
+        reported_only=reported_only,
         page=page,
         page_size=page_size,
     )
@@ -82,7 +96,7 @@ def moderation_queue(
 @router.post(
     "/{listing_public_id}/review",
     response_model=ListingDetailSchema,
-    summary="Approve or reject a listing that is pending review",
+    summary="Apply moderation or visibility actions to a listing",
 )
 def moderate_listing(
     listing_public_id: str,

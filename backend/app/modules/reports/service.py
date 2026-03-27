@@ -7,14 +7,15 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.auth import utcnow
 from app.core.exceptions import AppError
-from app.db.enums import ReportStatus
-from app.db.models import Listing, Report, User
+from app.db.enums import ListingStatus, ReportStatus, UserStatus
+from app.db.models import Listing, Report, User, UserStatusHistory
 from app.modules.reports.schemas import PaginatedReportsResponseSchema, ReportActionRequest, ReportCreateRequest, ReportSchema
 from app.shared.audit import record_admin_audit_log
 from app.shared.schemas import PaginationMetaSchema
 
 
 def create_report(session: Session, *, reporter: User, payload: ReportCreateRequest) -> ReportSchema:
+    normalized_reason_code = payload.reason_code.strip().lower()
     listing = None
     reported_user = None
 
@@ -51,7 +52,7 @@ def create_report(session: Session, *, reporter: User, payload: ReportCreateRequ
             Report.reporter_user_id == reporter.id,
             Report.reported_user_id == (reported_user.id if reported_user else None),
             Report.listing_id == (listing.id if listing else None),
-            Report.reason_code == payload.reason_code,
+            Report.reason_code == normalized_reason_code,
             Report.status.in_([ReportStatus.OPEN, ReportStatus.IN_REVIEW]),
         )
         .order_by(Report.created_at.desc(), Report.id.desc())
@@ -63,7 +64,7 @@ def create_report(session: Session, *, reporter: User, payload: ReportCreateRequ
         reporter_user_id=reporter.id,
         reported_user_id=reported_user.id if reported_user else None,
         listing_id=listing.id if listing else None,
-        reason_code=payload.reason_code.strip().lower(),
+        reason_code=normalized_reason_code,
         description=payload.description.strip() if payload.description else None,
         status=ReportStatus.OPEN,
     )
@@ -89,10 +90,22 @@ def list_admin_reports(
     page: int,
     page_size: int,
     status: ReportStatus | None = None,
+    listing_public_id: str | None = None,
+    reported_user_public_id: str | None = None,
 ) -> PaginatedReportsResponseSchema:
     base_query = _report_query()
     if status is not None:
         base_query = base_query.where(Report.status == status)
+    if listing_public_id is not None:
+        listing = session.execute(select(Listing).where(Listing.public_id == listing_public_id)).scalar_one_or_none()
+        if listing is None:
+            raise AppError(status_code=404, code="listing_not_found", message="Listing was not found.")
+        base_query = base_query.where(Report.listing_id == listing.id)
+    if reported_user_public_id is not None:
+        reported_user = session.execute(select(User).where(User.public_id == reported_user_public_id)).scalar_one_or_none()
+        if reported_user is None:
+            raise AppError(status_code=404, code="user_not_found", message="User was not found.")
+        base_query = base_query.where(Report.reported_user_id == reported_user.id)
     base_query = base_query.order_by(Report.created_at.desc(), Report.id.desc())
     return _paginate_reports(session, base_query=base_query, page=page, page_size=page_size)
 
@@ -108,19 +121,46 @@ def update_report_status(
 ) -> ReportSchema:
     report = _get_report_or_404(session, report_public_id=report_public_id)
     before_json = _report_snapshot(report)
+    resolution_note = payload.resolution_note.strip() if payload.resolution_note else None
 
     if payload.action == "in_review":
         report.status = ReportStatus.IN_REVIEW
-        report.resolution_note = payload.resolution_note
+        report.resolution_note = resolution_note
         report.resolved_by_user_id = None
         report.resolved_at = None
         action_name = "report.mark_in_review"
     else:
         report.status = ReportStatus.RESOLVED if payload.action == "resolve" else ReportStatus.REJECTED
-        report.resolution_note = payload.resolution_note.strip() if payload.resolution_note else None
+        report.resolution_note = resolution_note
         report.resolved_by_user_id = actor.id
         report.resolved_at = utcnow()
         action_name = "report.resolve" if payload.action == "resolve" else "report.dismiss"
+
+    if payload.listing_action is not None:
+        if report.listing is None:
+            raise AppError(status_code=400, code="report_has_no_listing_target", message="This report is not linked to a listing.")
+        _apply_listing_action_from_report(
+            session,
+            report=report,
+            actor=actor,
+            listing_action=payload.listing_action,
+            note=resolution_note,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+
+    if payload.user_action is not None:
+        if report.reported_user is None:
+            raise AppError(status_code=400, code="report_has_no_user_target", message="This report is not linked to a reported user.")
+        _apply_user_action_from_report(
+            session,
+            report=report,
+            actor=actor,
+            user_action=payload.user_action,
+            note=resolution_note,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
 
     session.flush()
     record_admin_audit_log(
@@ -185,8 +225,11 @@ def _build_report_schema(report: Report) -> ReportSchema:
         reported_username=reported_user.username if reported_user else None,
         listing_public_id=listing.public_id if listing else None,
         listing_title=listing.title if listing else None,
+        listing_status=listing.status if listing else None,
+        listing_moderation_note=listing.moderation_note if listing else None,
         reason_code=report.reason_code,
         description=report.description,
+        reported_user_status=reported_user.status if reported_user else None,
         status=report.status,
         resolution_note=report.resolution_note,
         resolved_at=report.resolved_at,
@@ -203,3 +246,78 @@ def _report_snapshot(report: Report) -> dict[str, str | None]:
         "listing_public_id": report.listing.public_id if report.listing else None,
         "reported_user_public_id": report.reported_user.public_id if report.reported_user else None,
     }
+
+
+def _apply_listing_action_from_report(
+    session: Session,
+    *,
+    report: Report,
+    actor: User,
+    listing_action: str,
+    note: str | None,
+    ip_address: str | None,
+    user_agent: str | None,
+) -> None:
+    listing = report.listing
+    before_json = {
+        "status": listing.status.value,
+        "moderation_note": listing.moderation_note,
+    }
+    if listing_action == "hide":
+        listing.status = ListingStatus.INACTIVE
+        action_name = "listing.hide_from_report"
+        action_label = "hid"
+    else:
+        listing.status = ListingStatus.ARCHIVED
+        action_name = "listing.archive_from_report"
+        action_label = "archived"
+    listing.moderation_note = note
+    record_admin_audit_log(
+        session,
+        actor=actor,
+        action=action_name,
+        entity_type="listing",
+        entity_id=listing.public_id,
+        description=f"{actor.full_name} {action_label} listing from report {report.public_id}.",
+        ip_address=ip_address,
+        user_agent=user_agent,
+        before_json=before_json,
+        after_json={"status": listing.status.value, "moderation_note": note, "report_public_id": report.public_id},
+    )
+
+
+def _apply_user_action_from_report(
+    session: Session,
+    *,
+    report: Report,
+    actor: User,
+    user_action: str,
+    note: str | None,
+    ip_address: str | None,
+    user_agent: str | None,
+) -> None:
+    reported_user = report.reported_user
+    previous_status = reported_user.status
+    if user_action == "suspend":
+        reported_user.status = UserStatus.SUSPENDED
+        session.add(
+            UserStatusHistory(
+                user_id=reported_user.id,
+                previous_status=previous_status,
+                new_status=UserStatus.SUSPENDED,
+                changed_by_user_id=actor.id,
+                reason=note,
+            )
+        )
+        record_admin_audit_log(
+            session,
+            actor=actor,
+            action="user.suspend_from_report",
+            entity_type="user",
+            entity_id=reported_user.public_id,
+            description=f"Suspended user from report {report.public_id}.",
+            ip_address=ip_address,
+            user_agent=user_agent,
+            before_json={"status": previous_status.value},
+            after_json={"status": reported_user.status.value, "reason": note, "report_public_id": report.public_id},
+        )

@@ -264,10 +264,16 @@ Baseline auth flows:
 ## File Storage Strategy
 - Media files are stored in object storage, not as database blobs.
 - MySQL stores metadata such as storage key, checksum, MIME type, dimensions, and uploader.
-- Listing images attach through a `media_assets` relation so files remain traceable and reusable.
+- Property media attach through the `listing_media` relation and can be images or short MP4 video tours.
 - Local development should use MinIO for S3-compatible behavior.
 - MVP upload path should be backend-managed multipart upload for simpler control and validation.
 - The storage service must be abstracted so S3-compatible production storage can replace local MinIO without changing domain code.
+
+## Location Strategy
+- Listings store `city`, `district`, `address_text`, `map_label`, `latitude`, and `longitude`.
+- The backend is map-provider agnostic; current clients are expected to use OpenStreetMap-backed components such as Leaflet on web/admin and `flutter_map` on mobile.
+- Exact address is stored for operational use, but the API can expose either exact or approximate location depending on the endpoint and product policy.
+- Current backend behavior keeps exact `address_text` private to owners/admin while still exposing map-aware fields for discovery and detail views.
 
 ## Notification Strategy
 - In-app notifications are real and stored in MySQL from the first MVP.
@@ -298,18 +304,14 @@ The important tradeoff is this: the domain must be real even if the first provid
 Important rule: promotion activation happens through application logic, never through direct field edits in admin tables.
 
 ## Moderation Flow
-1. Seller creates or edits a listing in `draft`.
-2. Seller submits listing for review.
-3. Listing becomes `pending_review`.
-4. Admin reviews content, images, price sanity, and policy compliance.
-5. Admin action results in:
-   - `published`
-   - `rejected`
-   - `needs_changes` if implemented as a separate state
-6. Approved listings become visible in public discovery endpoints.
-7. Certain risky edits to published listings should push them back into review.
+1. Seller creates or edits a property listing in `draft`.
+2. Seller can publish directly once the property passes backend validation.
+3. Public discovery shows published listings from active sellers without mandatory pre-approval.
+4. Admin primarily works from reports, manual visibility controls, and suspension workflows rather than approving every new listing.
+5. Admin actions can move a listing to `inactive`, `archived`, `rejected`, `published`, or `pending_review` for exceptional manual review.
+6. Report flows can also suspend the seller and record both audit logs and user status history notes.
 
-Moderation is intentionally explicit because electronics marketplaces are vulnerable to counterfeit, misleading specs, and stolen device listings.
+Moderation is intentionally report-driven because real-estate marketplaces need faster publication while still preserving a strong response path for fraud, misleading property details, and abusive behavior.
 
 ## Audit Logging Strategy
 Audit logging is mandatory for admin and other sensitive workflows.

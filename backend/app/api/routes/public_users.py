@@ -8,6 +8,7 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
+from app.db.enums import ListingPurpose, PropertyType
 from app.modules.listings.schemas import ListingQueryParams, ListingSortOption, PaginatedListingsResponseSchema
 from app.modules.listings.service import list_public_user_listings
 from app.modules.users.schemas import PublicUserProfileSchema
@@ -51,9 +52,15 @@ def public_user_listings(
     user_public_id: str,
     q: str | None = Query(default=None),
     category_public_id: str | None = Query(default=None),
+    purpose: ListingPurpose | None = Query(default=None),
+    property_type: PropertyType | None = Query(default=None),
     city: str | None = Query(default=None),
+    district: str | None = Query(default=None),
     min_price: Decimal | None = Query(default=None),
     max_price: Decimal | None = Query(default=None),
+    min_area_sqm: Decimal | None = Query(default=None),
+    max_area_sqm: Decimal | None = Query(default=None),
+    room_count: int | None = Query(default=None, ge=1, le=50),
     sort: ListingSortOption = Query(default="newest"),
     promoted_first: bool = Query(default=False),
     page: int = Query(default=1, ge=1),
@@ -64,9 +71,15 @@ def public_user_listings(
     filters = _validated_listing_filters(
         query=q,
         category_public_id=category_public_id,
+        purpose=purpose,
+        property_type=property_type,
         city=city,
+        district=district,
         min_price=min_price,
         max_price=max_price,
+        min_area_sqm=min_area_sqm,
+        max_area_sqm=max_area_sqm,
+        room_count=room_count,
         sort=sort,
         promoted_first=promoted_first,
         page=page,

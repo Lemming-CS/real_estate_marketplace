@@ -3,7 +3,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 from app.core.security import hash_password
-from app.db.enums import ListingCondition, ListingStatus, RoleCode, UserStatus
+from app.db.enums import ListingPurpose, ListingStatus, PropertyType, RoleCode, UserStatus
 from app.db.models import Category, Listing, Role, User, UserRole
 
 
@@ -122,12 +122,24 @@ def test_current_user_profile_update_image_upload_and_owner_listings(test_enviro
             Listing(
                 seller_id=user.id,
                 category_id=category.id,
-                title="Temporary test listing",
-                description="This listing exists to test the owner endpoint.",
+                title="Temporary test apartment listing",
+                description="This property listing exists to test the owner endpoint and profile foundations.",
+                purpose=ListingPurpose.RENT,
+                property_type=PropertyType.APARTMENT,
                 price_amount=Decimal("100.00"),
-                item_condition=ListingCondition.NEW,
+                item_condition=None,
                 status=ListingStatus.PUBLISHED,
                 city="Bishkek",
+                district="Lenin District",
+                address_text="100 Test Address, Bishkek",
+                map_label="Test area",
+                latitude=Decimal("42.8746210"),
+                longitude=Decimal("74.5697620"),
+                room_count=1,
+                area_sqm=Decimal("32.00"),
+                floor=2,
+                total_floors=5,
+                furnished=True,
             )
         )
         session.commit()
@@ -157,7 +169,7 @@ def test_current_user_profile_update_image_upload_and_owner_listings(test_enviro
     listings_response = client.get("/api/v1/users/me/listings", headers=_auth_headers(access_token))
     assert listings_response.status_code == 200
     assert len(listings_response.json()) == 1
-    assert listings_response.json()[0]["title"] == "Temporary test listing"
+    assert listings_response.json()[0]["title"] == "Temporary test apartment listing"
 
 
 def test_suspended_user_cannot_login_or_access_restricted_routes(test_environment):

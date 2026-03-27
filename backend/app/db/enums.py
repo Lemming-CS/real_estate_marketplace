@@ -32,6 +32,16 @@ class ListingCondition(StrEnum):
     FOR_PARTS = "for_parts"
 
 
+class ListingPurpose(StrEnum):
+    RENT = "rent"
+    SALE = "sale"
+
+
+class PropertyType(StrEnum):
+    APARTMENT = "apartment"
+    HOUSE = "house"
+
+
 class ListingStatus(StrEnum):
     DRAFT = "draft"
     PENDING_REVIEW = "pending_review"

@@ -7,7 +7,16 @@ from app.core.auth import create_access_token
 from app.core.auth import utcnow
 from app.core.config import get_settings
 from app.core.security import hash_password
-from app.db.enums import CategoryAttributeType, ListingCondition, ListingStatus, MediaType, PromotionStatus, RoleCode, UserStatus
+from app.db.enums import (
+    CategoryAttributeType,
+    ListingPurpose,
+    ListingStatus,
+    MediaType,
+    PromotionStatus,
+    PropertyType,
+    RoleCode,
+    UserStatus,
+)
 from app.db.models import (
     AdminAuditLog,
     Category,
@@ -66,33 +75,40 @@ def _access_token_for_user(user: User, *, roles: list[RoleCode]) -> str:
 
 
 def _create_category_with_attributes(session) -> Category:
-    category = Category(slug="smartphones", internal_name="Smartphones", is_active=True, sort_order=10)
+    category = Category(slug="apartments", internal_name="Apartments", is_active=True, sort_order=10)
     category.translations = [
-        CategoryTranslation(locale="en", name="Smartphones", description="Phones and accessories"),
-        CategoryTranslation(locale="ru", name="Smartfony", description="Telefony i aksessuary"),
+        CategoryTranslation(locale="en", name="Apartments", description="Apartment listings"),
+        CategoryTranslation(locale="ru", name="Kvartiry", description="Ob" "yavleniya o kvartirakh"),
     ]
-    brand_attribute = CategoryAttribute(
-        code="brand",
-        display_name="Brand",
-        data_type=CategoryAttributeType.SELECT,
+    bathrooms_attribute = CategoryAttribute(
+        code="bathrooms",
+        display_name="Bathrooms",
+        data_type=CategoryAttributeType.NUMBER,
         is_required=True,
         is_filterable=True,
         sort_order=1,
-        options=[
-            CategoryAttributeOption(option_value="apple", option_label="Apple", sort_order=1),
-            CategoryAttributeOption(option_value="samsung", option_label="Samsung", sort_order=2),
-        ],
     )
-    storage_attribute = CategoryAttribute(
-        code="storage_gb",
-        display_name="Storage",
-        data_type=CategoryAttributeType.NUMBER,
-        unit="GB",
+    heating_attribute = CategoryAttribute(
+        code="heating_type",
+        display_name="Heating type",
+        data_type=CategoryAttributeType.SELECT,
         is_required=True,
         is_filterable=True,
         sort_order=2,
+        options=[
+            CategoryAttributeOption(option_value="central", option_label="Central", sort_order=1),
+            CategoryAttributeOption(option_value="gas", option_label="Gas", sort_order=2),
+        ],
     )
-    category.attributes = [brand_attribute, storage_attribute]
+    pet_attribute = CategoryAttribute(
+        code="pet_friendly",
+        display_name="Pet friendly",
+        data_type=CategoryAttributeType.BOOLEAN,
+        is_required=False,
+        is_filterable=True,
+        sort_order=3,
+    )
+    category.attributes = [bathrooms_attribute, heating_attribute, pet_attribute]
     session.add(category)
     session.commit()
     session.refresh(category)
@@ -120,8 +136,13 @@ def _create_published_listing(
     description: str,
     price_amount: str,
     city: str,
-    brand_option: str | None = None,
-    storage_value: str | None = None,
+    purpose: ListingPurpose = ListingPurpose.SALE,
+    property_type: PropertyType = PropertyType.APARTMENT,
+    district: str = "Lenin District",
+    room_count: int = 2,
+    area_sqm: str = "68.00",
+    heating_option: str | None = None,
+    bathrooms_value: str | None = None,
     promoted: bool = False,
     published_offset_days: int = 0,
 ) -> Listing:
@@ -130,11 +151,23 @@ def _create_published_listing(
         category_id=category.id,
         title=title,
         description=description,
+        purpose=purpose,
+        property_type=property_type,
         price_amount=Decimal(price_amount),
         currency_code="USD",
-        item_condition=ListingCondition.LIKE_NEW,
+        item_condition=None,
         status=ListingStatus.PUBLISHED,
         city=city,
+        district=district,
+        address_text=f"100 Test Address, {city}",
+        map_label=f"{district}, {city}",
+        latitude=Decimal("42.8746210"),
+        longitude=Decimal("74.5697620"),
+        room_count=room_count,
+        area_sqm=Decimal(area_sqm),
+        floor=5 if property_type == PropertyType.APARTMENT else 2,
+        total_floors=9 if property_type == PropertyType.APARTMENT else 2,
+        furnished=True,
         published_at=utcnow() - timedelta(days=published_offset_days),
     )
     session.add(listing)
@@ -153,20 +186,20 @@ def _create_published_listing(
     )
 
     attribute_by_code = {attribute.code: attribute for attribute in category.attributes}
-    if brand_option and "brand" in attribute_by_code:
+    if bathrooms_value and "bathrooms" in attribute_by_code:
         session.add(
             ListingAttributeValue(
                 listing_id=listing.id,
-                category_attribute_id=attribute_by_code["brand"].id,
-                option_value=brand_option,
+                category_attribute_id=attribute_by_code["bathrooms"].id,
+                numeric_value=Decimal(bathrooms_value),
             )
         )
-    if storage_value and "storage_gb" in attribute_by_code:
+    if heating_option and "heating_type" in attribute_by_code:
         session.add(
             ListingAttributeValue(
                 listing_id=listing.id,
-                category_attribute_id=attribute_by_code["storage_gb"].id,
-                numeric_value=Decimal(storage_value),
+                category_attribute_id=attribute_by_code["heating_type"].id,
+                option_value=heating_option,
             )
         )
 
@@ -278,15 +311,27 @@ def test_listing_crud_moderation_and_public_visibility(test_environment):
         headers=seller_headers,
         json={
             "category_public_id": category.public_id,
-            "title": "iPhone 15 Pro 256GB",
-            "description": "Single-owner device in excellent condition with charging cable and box.",
-            "price_amount": "1050.00",
+            "title": "2-room apartment with balcony",
+            "description": "Freshly renovated apartment with balcony, appliances, and stable internet in a central neighborhood.",
+            "purpose": "rent",
+            "property_type": "apartment",
+            "price_amount": "850.00",
             "currency_code": "usd",
-            "item_condition": "like_new",
             "city": "Bishkek",
+            "district": "Lenin District",
+            "address_text": "105 Chui Avenue, Bishkek",
+            "map_label": "Ala-Too area",
+            "latitude": "42.8746210",
+            "longitude": "74.5697620",
+            "room_count": 2,
+            "area_sqm": "68.00",
+            "floor": 7,
+            "total_floors": 12,
+            "furnished": True,
             "attribute_values": [
-                {"attribute_code": "brand", "option_value": "apple"},
-                {"attribute_code": "storage_gb", "numeric_value": "256"},
+                {"attribute_code": "bathrooms", "numeric_value": "1"},
+                {"attribute_code": "heating_type", "option_value": "central"},
+                {"attribute_code": "pet_friendly", "boolean_value": True},
             ],
         },
     )
@@ -304,34 +349,38 @@ def test_listing_crud_moderation_and_public_visibility(test_environment):
     media_public_id = upload_response.json()["public_id"]
     assert (media_path / upload_response.json()["asset_key"]).exists()
 
-    submit_response = client.post(f"/api/v1/listings/{listing_public_id}/submit-review", headers=seller_headers)
+    submit_response = client.post(f"/api/v1/listings/{listing_public_id}/publish", headers=seller_headers)
     assert submit_response.status_code == 200
-    assert submit_response.json()["status"] == "pending_review"
+    assert submit_response.json()["status"] == "published"
 
-    moderation_queue = client.get("/api/v1/admin/listings/moderation", headers=admin_headers)
+    moderation_queue = client.get("/api/v1/admin/listings/moderation", headers=admin_headers, params={"status": "published"})
     assert moderation_queue.status_code == 200
     assert moderation_queue.json()["items"][0]["public_id"] == listing_public_id
 
-    public_before_approval = client.get("/api/v1/listings")
-    assert public_before_approval.status_code == 200
-    assert public_before_approval.json()["items"] == []
+    public_after_publish = client.get("/api/v1/listings")
+    assert public_after_publish.status_code == 200
+    assert public_after_publish.json()["items"][0]["public_id"] == listing_public_id
 
-    approve_response = client.post(
+    hide_response = client.post(
         f"/api/v1/admin/listings/{listing_public_id}/review",
         headers=admin_headers,
-        json={"action": "approve", "moderation_note": "Looks good."},
+        json={"action": "hide", "moderation_note": "Temporarily hidden during abuse review."},
     )
-    assert approve_response.status_code == 200
-    assert approve_response.json()["status"] == "published"
+    assert hide_response.status_code == 200
+    assert hide_response.json()["status"] == "inactive"
 
-    seller_notifications = client.get("/api/v1/notifications", headers=seller_headers)
-    assert seller_notifications.status_code == 200
-    assert seller_notifications.json()["items"][0]["notification_type"] == "listing.approved"
+    public_hidden = client.get("/api/v1/listings", params={"locale": "ru"})
+    assert public_hidden.status_code == 200
+    assert public_hidden.json()["items"] == []
 
-    public_after_approval = client.get("/api/v1/listings", params={"locale": "ru"})
-    assert public_after_approval.status_code == 200
-    assert public_after_approval.json()["items"][0]["public_id"] == listing_public_id
-    assert public_after_approval.json()["items"][0]["category"]["name"] == "Smartfony"
+    reactivate_response = client.post(f"/api/v1/listings/{listing_public_id}/reactivate", headers=seller_headers)
+    assert reactivate_response.status_code == 200
+    assert reactivate_response.json()["status"] == "published"
+
+    public_after_reactivate = client.get("/api/v1/listings", params={"locale": "ru"})
+    assert public_after_reactivate.status_code == 200
+    assert public_after_reactivate.json()["items"][0]["public_id"] == listing_public_id
+    assert public_after_reactivate.json()["items"][0]["category"]["name"] == "Kvartiry"
 
     replace_response = client.put(
         f"/api/v1/listings/{listing_public_id}/media/{media_public_id}",
@@ -343,14 +392,14 @@ def test_listing_crud_moderation_and_public_visibility(test_environment):
     update_response = client.patch(
         f"/api/v1/listings/{listing_public_id}",
         headers=seller_headers,
-        json={"title": "iPhone 15 Pro 256GB Updated"},
+        json={"title": "2-room apartment with balcony and new furniture"},
     )
     assert update_response.status_code == 200
-    assert update_response.json()["status"] == "pending_review"
+    assert update_response.json()["status"] == "published"
 
     public_after_edit = client.get("/api/v1/listings")
     assert public_after_edit.status_code == 200
-    assert public_after_edit.json()["items"] == []
+    assert public_after_edit.json()["items"][0]["title"] == "2-room apartment with balcony and new furniture"
 
 
 def test_listing_permissions_media_management_and_suspension_rules(test_environment):
@@ -378,14 +427,25 @@ def test_listing_permissions_media_management_and_suspension_rules(test_environm
         headers=owner_headers,
         json={
             "category_public_id": category.public_id,
-            "title": "Samsung Galaxy S24 128GB",
-            "description": "Factory unlocked phone with valid receipt and very light use.",
-            "price_amount": "780.00",
-            "item_condition": "new",
+            "title": "Compact studio in city center",
+            "description": "Compact studio apartment with recent cosmetic repairs, washing machine, and central heating.",
+            "purpose": "rent",
+            "property_type": "apartment",
+            "price_amount": "540.00",
             "city": "Bishkek",
+            "district": "Sverdlov District",
+            "address_text": "22 Toktogul Street, Bishkek",
+            "map_label": "Toktogul area",
+            "latitude": "42.8799400",
+            "longitude": "74.5901500",
+            "room_count": 1,
+            "area_sqm": "34.00",
+            "floor": 4,
+            "total_floors": 5,
+            "furnished": False,
             "attribute_values": [
-                {"attribute_code": "brand", "option_value": "samsung"},
-                {"attribute_code": "storage_gb", "numeric_value": "128"},
+                {"attribute_code": "bathrooms", "numeric_value": "1"},
+                {"attribute_code": "heating_type", "option_value": "gas"},
             ],
         },
     )
@@ -427,8 +487,9 @@ def test_listing_permissions_media_management_and_suspension_rules(test_environm
     assert primary_response.status_code == 200
     assert primary_response.json()[0]["is_primary"] is True
 
-    submit_response = client.post(f"/api/v1/listings/{listing_public_id}/submit-review", headers=owner_headers)
+    submit_response = client.post(f"/api/v1/listings/{listing_public_id}/publish", headers=owner_headers)
     assert submit_response.status_code == 200
+    assert submit_response.json()["status"] == "published"
 
     delete_second = client.delete(
         f"/api/v1/listings/{listing_public_id}/media/{second_media.json()['public_id']}",
@@ -448,14 +509,24 @@ def test_listing_permissions_media_management_and_suspension_rules(test_environm
         headers=suspended_headers,
         json={
             "category_public_id": category.public_id,
-            "title": "Suspended listing",
-            "description": "This should not be created because the account is suspended.",
-            "price_amount": "100.00",
-            "item_condition": "used_good",
+            "title": "Suspended seller listing",
+            "description": "This should not be created because the account is suspended and property posting is restricted.",
+            "purpose": "sale",
+            "property_type": "apartment",
+            "price_amount": "38000.00",
             "city": "Bishkek",
+            "district": "Lenin District",
+            "address_text": "1 Demo Street, Bishkek",
+            "map_label": "Demo area",
+            "latitude": "42.8700000",
+            "longitude": "74.5800000",
+            "room_count": 1,
+            "area_sqm": "32.00",
+            "floor": 2,
+            "total_floors": 5,
             "attribute_values": [
-                {"attribute_code": "brand", "option_value": "apple"},
-                {"attribute_code": "storage_gb", "numeric_value": "64"},
+                {"attribute_code": "bathrooms", "numeric_value": "1"},
+                {"attribute_code": "heating_type", "option_value": "central"},
             ],
         },
     )
@@ -467,65 +538,78 @@ def test_discovery_search_filters_sort_pagination_and_public_owner_pages(test_en
     session_factory = test_environment["session_factory"]
 
     with session_factory() as session:
-        smartphones = _create_category_with_attributes(session)
-        tablets = _create_category_without_attributes(session, slug="tablets", name="Tablets")
+        apartments = _create_category_with_attributes(session)
+        houses = _create_category_without_attributes(session, slug="houses", name="Houses")
         seller = _create_user(session, email="seller.discovery@example.com", username="seller_discovery", roles=[RoleCode.USER, RoleCode.SELLER])
 
         promoted_listing = _create_published_listing(
             session,
             seller=seller,
-            category=smartphones,
-            title="iPhone 14 Pro 256GB",
-            description="Premium iPhone listing with full комплект and clean history.",
+            category=apartments,
+            title="2-room apartment near the park",
+            description="Bright apartment with furniture, balcony, and flexible move-in date.",
             price_amount="900.00",
             city="Bishkek",
-            brand_option="apple",
-            storage_value="256",
+            purpose=ListingPurpose.RENT,
+            property_type=PropertyType.APARTMENT,
+            bathrooms_value="1",
+            heating_option="central",
             promoted=True,
             published_offset_days=2,
         )
         _create_published_listing(
             session,
             seller=seller,
-            category=smartphones,
-            title="Samsung Galaxy S24 128GB",
-            description="Samsung flagship with charger, receipt, and low battery cycles.",
+            category=apartments,
+            title="1-room apartment in Osh center",
+            description="Compact rental apartment close to transport and supermarkets.",
             price_amount="700.00",
             city="Osh",
-            brand_option="samsung",
-            storage_value="128",
+            purpose=ListingPurpose.RENT,
+            property_type=PropertyType.APARTMENT,
+            room_count=1,
+            area_sqm="38.00",
+            bathrooms_value="1",
+            heating_option="gas",
             published_offset_days=1,
         )
         _create_published_listing(
             session,
             seller=seller,
-            category=tablets,
-            title="iPad Air 64GB",
-            description="Tablet listing with keyboard case and excellent screen condition.",
-            price_amount="500.00",
+            category=houses,
+            title="Family house with garden",
+            description="Detached house with landscaped yard, covered garage, and renovated kitchen.",
+            price_amount="185000.00",
             city="Bishkek",
+            purpose=ListingPurpose.SALE,
+            property_type=PropertyType.HOUSE,
+            room_count=5,
+            area_sqm="210.00",
             published_offset_days=0,
         )
 
-    search_response = client.get("/api/v1/listings", params={"q": "iphone", "page": 1, "page_size": 10})
+    search_response = client.get("/api/v1/listings", params={"q": "park", "page": 1, "page_size": 10})
     assert search_response.status_code == 200
     assert search_response.json()["meta"]["total_items"] == 1
-    assert search_response.json()["items"][0]["title"] == "iPhone 14 Pro 256GB"
+    assert search_response.json()["items"][0]["title"] == "2-room apartment near the park"
 
     filter_response = client.get(
         "/api/v1/listings",
         params={
             "city": "Bishkek",
+            "purpose": "rent",
+            "property_type": "apartment",
             "min_price": "400",
             "max_price": "950",
+            "min_area_sqm": "50",
             "sort": "price_desc",
             "page": 1,
             "page_size": 1,
         },
     )
     assert filter_response.status_code == 200
-    assert filter_response.json()["meta"]["total_items"] == 2
-    assert filter_response.json()["meta"]["total_pages"] == 2
+    assert filter_response.json()["meta"]["total_items"] == 1
+    assert filter_response.json()["meta"]["total_pages"] == 1
     assert filter_response.json()["items"][0]["price_amount"] == "900.00"
 
     promoted_response = client.get("/api/v1/listings", params={"promoted_first": True, "sort": "oldest"})
@@ -539,11 +623,11 @@ def test_discovery_search_filters_sort_pagination_and_public_owner_pages(test_en
 
     owner_listings = client.get(
         f"/api/v1/public/users/{seller.public_id}/listings",
-        params={"sort": "price_asc", "page": 1, "page_size": 2},
+        params={"purpose": "rent", "sort": "price_asc", "page": 1, "page_size": 2},
     )
     assert owner_listings.status_code == 200
-    assert owner_listings.json()["meta"]["total_items"] == 3
-    assert owner_listings.json()["items"][0]["price_amount"] == "500.00"
+    assert owner_listings.json()["meta"]["total_items"] == 2
+    assert owner_listings.json()["items"][0]["price_amount"] == "700.00"
 
 
 def test_favorites_add_remove_list_and_unavailable_listing_handling(test_environment):
@@ -558,12 +642,14 @@ def test_favorites_add_remove_list_and_unavailable_listing_handling(test_environ
             session,
             seller=seller,
             category=category,
-            title="Google Pixel 9 128GB",
-            description="Pixel phone listing with original charger and boxed accessories.",
+            title="1-room apartment with fresh renovation",
+            description="Compact apartment listing with fresh renovation, appliances, and a walkable location.",
             price_amount="650.00",
             city="Bishkek",
-            brand_option="apple",
-            storage_value="128",
+            purpose=ListingPurpose.RENT,
+            property_type=PropertyType.APARTMENT,
+            bathrooms_value="1",
+            heating_option="central",
         )
 
     buyer_headers = _auth_headers(_access_token_for_user(buyer, roles=[RoleCode.USER]))
@@ -643,12 +729,16 @@ def test_messaging_permissions_notifications_and_self_message_protection(test_en
             session,
             seller=seller,
             category=category,
-            title="MacBook Pro 14 M3",
-            description="Powerful laptop listing with charger and low cycle count.",
-            price_amount="1800.00",
+            title="3-room apartment with mountain view",
+            description="Large apartment with mountain view, renovated bathrooms, and underground parking.",
+            price_amount="1350.00",
             city="Bishkek",
-            brand_option="apple",
-            storage_value="512",
+            purpose=ListingPurpose.RENT,
+            property_type=PropertyType.APARTMENT,
+            room_count=3,
+            area_sqm="96.00",
+            bathrooms_value="2",
+            heating_option="central",
         )
 
     seller_headers = _auth_headers(_access_token_for_user(seller, roles=[RoleCode.USER, RoleCode.SELLER]))
@@ -720,12 +810,16 @@ def test_duplicate_conversation_creation_is_idempotent(test_environment):
             session,
             seller=seller,
             category=category,
-            title="Nintendo Switch OLED",
-            description="Clean console bundle with dock and extra controller.",
-            price_amount="320.00",
+            title="Townhouse listing for duplicate thread test",
+            description="Townhouse listing used to verify duplicate conversation creation remains idempotent.",
+            price_amount="120000.00",
             city="Bishkek",
-            brand_option="apple",
-            storage_value="128",
+            purpose=ListingPurpose.SALE,
+            property_type=PropertyType.HOUSE,
+            room_count=4,
+            area_sqm="160.00",
+            bathrooms_value="2",
+            heating_option="gas",
         )
         listing_public_id = listing.public_id
         listing_id = listing.id
@@ -769,12 +863,16 @@ def test_message_attachments_validation_and_secure_download(test_environment):
             session,
             seller=seller,
             category=category,
-            title="Sony A7 IV Camera",
-            description="Camera listing with extra battery and pristine sensor condition.",
-            price_amount="1500.00",
+            title="Apartment listing with attachment exchange",
+            description="Apartment listing used to test secure message attachment uploads and downloads.",
+            price_amount="980.00",
             city="Bishkek",
-            brand_option="apple",
-            storage_value="128",
+            purpose=ListingPurpose.RENT,
+            property_type=PropertyType.APARTMENT,
+            room_count=2,
+            area_sqm="72.00",
+            bathrooms_value="1",
+            heating_option="central",
         )
 
     seller_headers = _auth_headers(_access_token_for_user(seller, roles=[RoleCode.USER, RoleCode.SELLER]))
@@ -834,12 +932,16 @@ def test_reporting_queue_resolution_and_audit_logging(test_environment):
             session,
             seller=seller,
             category=category,
-            title="Canon EOS R6 Body",
-            description="Camera body in good condition with shutter count under 10k.",
-            price_amount="1350.00",
+            title="Reported sale apartment",
+            description="Apartment listing used to exercise report resolution and audit logging flows.",
+            price_amount="72000.00",
             city="Bishkek",
-            brand_option="apple",
-            storage_value="128",
+            purpose=ListingPurpose.SALE,
+            property_type=PropertyType.APARTMENT,
+            room_count=2,
+            area_sqm="58.00",
+            bathrooms_value="1",
+            heating_option="gas",
         )
 
     buyer_headers = _auth_headers(_access_token_for_user(buyer, roles=[RoleCode.USER]))
@@ -882,10 +984,17 @@ def test_reporting_queue_resolution_and_audit_logging(test_environment):
     resolve_listing_report = client.post(
         f"/api/v1/admin/reports/{listing_report_public_id}/resolve",
         headers=admin_headers,
-        json={"action": "resolve", "resolution_note": "Listing escalated for manual moderator review."},
+        json={
+            "action": "resolve",
+            "resolution_note": "Listing hidden and seller suspended while documents are checked.",
+            "listing_action": "hide",
+            "user_action": "suspend",
+        },
     )
     assert resolve_listing_report.status_code == 200
     assert resolve_listing_report.json()["status"] == "resolved"
+    assert resolve_listing_report.json()["listing_status"] == "inactive"
+    assert resolve_listing_report.json()["reported_user_status"] == "suspended"
 
     dismiss_user_report = client.post(
         f"/api/v1/admin/reports/{user_report_public_id}/resolve",
@@ -902,6 +1011,8 @@ def test_reporting_queue_resolution_and_audit_logging(test_environment):
         audit_actions = {log.action for log in session.query(AdminAuditLog).all()}
         assert "report.resolve" in audit_actions
         assert "report.dismiss" in audit_actions
+        assert "listing.hide_from_report" in audit_actions
+        assert "user.suspend_from_report" in audit_actions
 
 
 def test_payment_to_promotion_activation_flow_and_invalid_attempts(test_environment):
@@ -916,23 +1027,31 @@ def test_payment_to_promotion_activation_flow_and_invalid_attempts(test_environm
             session,
             seller=seller,
             category=category,
-            title="DJI Mini 4 Pro",
-            description="Drone kit with spare battery, controller, and original packaging.",
-            price_amount="990.00",
+            title="Featured apartment in city center",
+            description="City-center apartment used to verify payment to promotion activation flow.",
+            price_amount="99000.00",
             city="Bishkek",
-            brand_option="apple",
-            storage_value="256",
+            purpose=ListingPurpose.SALE,
+            property_type=PropertyType.APARTMENT,
+            room_count=3,
+            area_sqm="92.00",
+            bathrooms_value="2",
+            heating_option="central",
         )
         draft_listing = _create_published_listing(
             session,
             seller=seller,
             category=category,
-            title="Steam Deck OLED Draft",
-            description="Draft console listing waiting for final photos and moderation review.",
-            price_amount="650.00",
+            title="Draft apartment listing",
+            description="Draft property listing waiting for final photos before publication.",
+            price_amount="65000.00",
             city="Bishkek",
-            brand_option="apple",
-            storage_value="512",
+            purpose=ListingPurpose.SALE,
+            property_type=PropertyType.APARTMENT,
+            room_count=2,
+            area_sqm="60.00",
+            bathrooms_value="1",
+            heating_option="gas",
         )
         draft_listing.status = ListingStatus.DRAFT
         draft_listing.published_at = None
@@ -947,8 +1066,8 @@ def test_payment_to_promotion_activation_flow_and_invalid_attempts(test_environm
         headers=admin_headers,
         json={
             "code": "featured_bishkek_7d",
-            "name": "Featured Bishkek 7 Days",
-            "description": "Boost listing visibility in Bishkek category feeds.",
+            "name": "Featured Bishkek Homes 7 Days",
+            "description": "Boost property visibility in Bishkek feed placements.",
             "duration_days": 7,
             "price_amount": "10.00",
             "currency_code": "USD",

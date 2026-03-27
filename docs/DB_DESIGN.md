@@ -1,7 +1,7 @@
 # Database Design
 
 ## Overview
-The backend uses a MySQL relational schema centered on marketplace transactions, messaging, moderation signals, and paid listing promotion. The schema is intentionally normalized for core entities, while dynamic listing specifications use a hybrid strategy: category-level attribute definitions plus typed listing attribute values.
+The backend uses a MySQL relational schema centered on real-estate listings, messaging, report-driven moderation, and paid listing promotion. The schema is intentionally normalized for core entities, while flexible property metadata uses a hybrid strategy: category-level attribute definitions plus typed listing attribute values.
 
 This matches the actual implementation in `backend/app/db/models/` and the initial Alembic migration in `backend/alembic/versions/20260326_0001_initial_marketplace_schema.py`.
 
@@ -54,9 +54,9 @@ This matches the actual implementation in `backend/app/db/models/` and the initi
 
 ### Listings and discovery
 - `listings`
-  Fields: `public_id`, `seller_id`, `category_id`, `title`, `description`, `price_amount`, `currency_code`, `item_condition`, `status`, `city`, `moderation_note`, `published_at`, `deleted_at`, timestamps
+  Fields: `public_id`, `seller_id`, `category_id`, `title`, `description`, `purpose`, `property_type`, `price_amount`, `currency_code`, `item_condition` (nullable legacy field), `status`, `city`, `district`, `address_text`, `map_label`, `latitude`, `longitude`, `room_count`, `area_sqm`, `floor`, `total_floors`, `furnished`, `moderation_note`, `published_at`, `deleted_at`, timestamps
   Constraints: unique `public_id`
-  Indexes: `(seller_id, status, created_at)`, `(category_id, status, price_amount)`, `(status, published_at)`, `(status, city, published_at)`, `(status, price_amount)`, `title`
+  Indexes: `(seller_id, status, created_at)`, `(category_id, status, price_amount)`, `(status, published_at)`, `(status, city, published_at)`, `(status, price_amount)`, `(purpose, property_type, status, published_at)`, `(city, purpose, property_type, price_amount)`, `(status, area_sqm)`, `(status, room_count)`, `title`
 - `listing_media`
   Fields: `public_id`, `listing_id`, `media_type`, `storage_key`, `mime_type`, `file_size_bytes`, `sort_order`, `is_primary`, `deleted_at`, timestamps
   Constraints: unique `(listing_id, sort_order)`
@@ -122,7 +122,9 @@ Implemented enums:
 - `users.status`: `active`, `pending_verification`, `suspended`, `deleted`
 - `roles.code`: `admin`, `user`, `seller`
 - `category_attributes.data_type`: `text`, `number`, `boolean`, `select`, `json`
-- `listings.item_condition`: `new`, `like_new`, `used_good`, `used_fair`, `for_parts`
+- `listings.purpose`: `rent`, `sale`
+- `listings.property_type`: `apartment`, `house`
+- `listings.item_condition`: `new`, `like_new`, `used_good`, `used_fair`, `for_parts` (legacy-compatible, nullable for real-estate listings)
 - `listings.status`: `draft`, `pending_review`, `published`, `rejected`, `archived`, `inactive`, `sold`
 - `conversations.status`: `active`, `closed`, `blocked`
 - `messages.message_type`: `text`, `image`, `system`
@@ -163,18 +165,21 @@ The implemented strategy is:
 - optional choice lists in `category_attribute_options`
 - typed per-listing values in `listing_attribute_values`
 
-This is the right tradeoff for electronics because:
+This is the right tradeoff for real estate because:
 
-- different categories need very different specs
-- filtering by specs is core marketplace behavior
-- new attributes can be introduced without schema migrations on the listings table
-- validation and filtering remain structured instead of relying on an opaque `specs_json` blob
+- core search fields such as `purpose`, `property_type`, price, rooms, area, and location belong directly on `listings`
+- category-specific property details still vary by category and future growth, for example:
+  - apartment-specific heating or pet rules
+  - house-specific lot size or parking flags
+  - future commercial, room, or land attributes
+- new category attributes can be introduced without schema churn on the main listings table
+- validation and filtering remain structured instead of relying on a single opaque `specs_json` blob
 
 Why not a single JSON column on `listings`:
 
-- it would make filtering by storage, RAM, or brand weaker and more inconsistent
+- it would weaken filtering by rooms, area, heating type, parking, or pet rules
 - admin-managed attribute definitions would become harder to enforce
-- schema discipline would drift quickly as more categories are added
+- schema discipline would drift quickly as more property categories are added
 
 Why not a fully separate table per category:
 
@@ -186,16 +191,21 @@ The chosen model keeps the schema stable while preserving queryability.
 The seed command creates:
 
 - 1 admin user
-- 2 normal users, including one seller
+- 1 renter/buyer user
+- 2 seller users, one for rental inventory and one for sale inventory
+- 1 suspended seller with status-note history
 - base roles
-- electronics, smartphones, and laptops categories with translations
-- sample category attributes and select options
-- 2 published sample listings
+- real-estate, apartments, and houses categories with translations
+- sample property attributes and select options
+- published rental and sale listings
+- one draft listing
+- one reported listing
 - sample listing media and attribute values
+- sample video tour media
 - a favorite record
-- a buyer-seller conversation with messages and an attachment
+- a renter-seller conversation with messages and an attachment
 - sample notifications
-- sample listing and user report data
+- sample listing report data
 - promotion packages
 - a successful promotion payment record
-- an admin audit log entry
+- admin audit log entries and suspension history

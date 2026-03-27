@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.auth import utcnow
 from app.core.config import Settings
 from app.core.exceptions import AppError
-from app.db.enums import ListingStatus, MediaType, PromotionStatus, RoleCode, UserStatus
+from app.db.enums import ListingStatus, MediaType, PromotionStatus, ReportStatus, RoleCode, UserStatus
 from app.db.models import (
     Category,
     CategoryAttribute,
@@ -22,6 +22,7 @@ from app.db.models import (
     ListingMedia,
     Promotion,
     PromotionPackage,
+    Report,
     Role,
     User,
     UserRole,
@@ -52,9 +53,10 @@ from app.shared.audit import record_admin_audit_log
 from app.shared.schemas import PaginationMetaSchema
 from app.shared.storage import delete_storage_key, save_upload
 
-MAX_LISTING_MEDIA_COUNT = 10
-MAX_LISTING_MEDIA_SIZE_BYTES = 10 * 1024 * 1024
-ALLOWED_LISTING_MEDIA_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
+MAX_LISTING_MEDIA_COUNT = 20
+MAX_LISTING_IMAGE_SIZE_BYTES = 10 * 1024 * 1024
+MAX_LISTING_VIDEO_SIZE_BYTES = 50 * 1024 * 1024
+ALLOWED_LISTING_MEDIA_MIME_TYPES = {"image/jpeg", "image/png", "image/webp", "video/mp4"}
 
 
 def list_public_listings(
@@ -130,7 +132,8 @@ def get_listing_detail(
         listing=listing,
         locale=locale,
         is_promoted=_active_promotion_map(session, [listing.id]).get(listing.id, False),
-        promotion_state=_active_promotion_state_map(session, [listing.id]).get(listing.id),
+        promotion_state=_active_promotion_state_map(session, [listing.id], locale=locale).get(listing.id),
+        include_exact_address=_can_view_exact_listing_location(session=session, listing=listing, actor=actor),
     )
 
 
@@ -149,11 +152,23 @@ def create_listing(
         category_id=category.id,
         title=payload.title.strip(),
         description=payload.description.strip(),
+        purpose=payload.purpose,
+        property_type=payload.property_type,
         price_amount=payload.price_amount,
         currency_code=payload.currency_code.upper(),
         item_condition=payload.item_condition,
         status=ListingStatus.DRAFT,
         city=payload.city.strip(),
+        district=payload.district.strip() if payload.district else None,
+        address_text=payload.address_text.strip(),
+        map_label=payload.map_label.strip() if payload.map_label else None,
+        latitude=payload.latitude,
+        longitude=payload.longitude,
+        room_count=payload.room_count,
+        area_sqm=payload.area_sqm,
+        floor=payload.floor,
+        total_floors=payload.total_floors,
+        furnished=payload.furnished,
     )
     session.add(listing)
     session.flush()
@@ -170,6 +185,7 @@ def create_listing(
         locale=locale,
         is_promoted=False,
         promotion_state=None,
+        include_exact_address=True,
     )
 
 
@@ -200,6 +216,10 @@ def update_listing(
         listing.title = updates["title"].strip()
     if "description" in updates:
         listing.description = updates["description"].strip()
+    if "purpose" in updates:
+        listing.purpose = updates["purpose"]
+    if "property_type" in updates:
+        listing.property_type = updates["property_type"]
     if "price_amount" in updates:
         listing.price_amount = updates["price_amount"]
     if "currency_code" in updates:
@@ -208,6 +228,26 @@ def update_listing(
         listing.item_condition = updates["item_condition"]
     if "city" in updates:
         listing.city = updates["city"].strip()
+    if "district" in updates:
+        listing.district = updates["district"].strip() if updates["district"] else None
+    if "address_text" in updates:
+        listing.address_text = updates["address_text"].strip()
+    if "map_label" in updates:
+        listing.map_label = updates["map_label"].strip() if updates["map_label"] else None
+    if "latitude" in updates:
+        listing.latitude = updates["latitude"]
+    if "longitude" in updates:
+        listing.longitude = updates["longitude"]
+    if "room_count" in updates:
+        listing.room_count = updates["room_count"]
+    if "area_sqm" in updates:
+        listing.area_sqm = updates["area_sqm"]
+    if "floor" in updates:
+        listing.floor = updates["floor"]
+    if "total_floors" in updates:
+        listing.total_floors = updates["total_floors"]
+    if "furnished" in updates:
+        listing.furnished = updates["furnished"]
 
     if category_changed and "attribute_values" not in updates:
         raise AppError(
@@ -223,16 +263,14 @@ def update_listing(
             attribute_inputs=updates["attribute_values"],
         )
 
-    if listing.status in {ListingStatus.PUBLISHED, ListingStatus.INACTIVE}:
-        _move_listing_to_pending_review(listing)
-
     session.flush()
     return _build_listing_detail_schema(
         session,
         listing=_get_listing_or_404(session, listing_public_id=listing.public_id),
         locale=locale,
         is_promoted=_active_promotion_map(session, [listing.id]).get(listing.id, False),
-        promotion_state=_active_promotion_state_map(session, [listing.id]).get(listing.id),
+        promotion_state=_active_promotion_state_map(session, [listing.id], locale=locale).get(listing.id),
+        include_exact_address=True,
     )
 
 
@@ -242,22 +280,30 @@ def submit_listing_for_review(
     listing_public_id: str,
     actor: User,
 ) -> ListingStatusSchema:
+    return publish_listing(session, listing_public_id=listing_public_id, actor=actor)
+
+
+def publish_listing(
+    session: Session,
+    *,
+    listing_public_id: str,
+    actor: User,
+) -> ListingStatusSchema:
     listing = _get_listing_or_404(session, listing_public_id=listing_public_id)
     _ensure_listing_write_access(session, listing=listing, actor=actor)
     _ensure_user_can_manage_listings(actor)
 
-    if listing.status not in {ListingStatus.DRAFT, ListingStatus.REJECTED, ListingStatus.INACTIVE, ListingStatus.ARCHIVED}:
+    if listing.status == ListingStatus.SOLD:
         raise AppError(
             status_code=409,
             code="invalid_listing_transition",
-            message="Listing cannot be submitted for review from its current status.",
+            message="Sold listings cannot be published again.",
         )
 
-    _ensure_listing_has_media(listing)
-    _validate_existing_attribute_values(listing=listing, category=listing.category)
-    listing.status = ListingStatus.PENDING_REVIEW
+    _ensure_listing_publishable(listing)
+    listing.status = ListingStatus.PUBLISHED
     listing.moderation_note = None
-    listing.published_at = None
+    listing.published_at = utcnow()
     session.flush()
     return _build_listing_status_schema(listing)
 
@@ -309,11 +355,13 @@ def reactivate_listing(session: Session, *, listing_public_id: str, actor: User)
             message="Listing cannot be reactivated from its current status.",
         )
 
-    _ensure_listing_has_media(listing)
+    _ensure_listing_publishable(listing)
     if listing.status == ListingStatus.INACTIVE:
         listing.status = ListingStatus.PUBLISHED
     else:
-        listing.status = ListingStatus.PUBLISHED if listing.published_at else ListingStatus.DRAFT
+        listing.status = ListingStatus.PUBLISHED
+    if listing.published_at is None:
+        listing.published_at = utcnow()
     session.flush()
     return _build_listing_status_schema(listing)
 
@@ -356,25 +404,26 @@ def upload_listing_media(
             details={"max_media_count": MAX_LISTING_MEDIA_COUNT},
         )
 
+    media_type, max_size_bytes = _listing_media_upload_rules(upload)
     storage_key, file_size_bytes = save_upload(
         settings=settings,
         upload=upload,
         relative_dir=Path("listings") / listing.public_id,
         allowed_mime_types=ALLOWED_LISTING_MEDIA_MIME_TYPES,
-        max_size_bytes=MAX_LISTING_MEDIA_SIZE_BYTES,
+        max_size_bytes=max_size_bytes,
     )
 
+    existing_images = [item for item in active_media if item.media_type == MediaType.IMAGE]
     media = ListingMedia(
         listing_id=listing.id,
-        media_type=MediaType.IMAGE,
+        media_type=media_type,
         storage_key=storage_key,
         mime_type=upload.content_type,
         file_size_bytes=file_size_bytes,
         sort_order=(max([item.sort_order for item in active_media], default=-1) + 1),
-        is_primary=not active_media,
+        is_primary=media_type == MediaType.IMAGE and not existing_images,
     )
     session.add(media)
-    _move_listing_to_pending_review_if_needed(listing)
     session.flush()
     return _build_listing_media_schema(media)
 
@@ -395,19 +444,29 @@ def replace_listing_media(
         raise AppError(status_code=409, code="listing_sold", message="Sold listings cannot modify media.")
     media = _get_listing_media_or_404(listing=listing, media_public_id=media_public_id)
 
+    media_type, max_size_bytes = _listing_media_upload_rules(upload)
+    if media.is_primary and media_type != MediaType.IMAGE:
+        raise AppError(
+            status_code=400,
+            code="primary_media_must_be_image",
+            message="The primary property media must be an image.",
+        )
+
     old_storage_key = media.storage_key
     storage_key, file_size_bytes = save_upload(
         settings=settings,
         upload=upload,
         relative_dir=Path("listings") / listing.public_id,
         allowed_mime_types=ALLOWED_LISTING_MEDIA_MIME_TYPES,
-        max_size_bytes=MAX_LISTING_MEDIA_SIZE_BYTES,
+        max_size_bytes=max_size_bytes,
     )
     media.storage_key = storage_key
+    media.media_type = media_type
     media.mime_type = upload.content_type
     media.file_size_bytes = file_size_bytes
     delete_storage_key(settings=settings, storage_key=old_storage_key)
-    _move_listing_to_pending_review_if_needed(listing)
+    if media.is_primary and media_type == MediaType.IMAGE:
+        _ensure_single_primary_image(listing)
     session.flush()
     return _build_listing_media_schema(media)
 
@@ -444,7 +503,10 @@ def reorder_listing_media(
     for index, media_public_id in enumerate(payload.media_public_ids):
         media_by_public_id[media_public_id].sort_order = index
 
-    primary_public_id = payload.media_public_ids[0] if payload.media_public_ids else None
+    primary_public_id = next(
+        (media_public_id for media_public_id in payload.media_public_ids if media_by_public_id[media_public_id].media_type == MediaType.IMAGE),
+        None,
+    )
     for media in active_media:
         media.is_primary = media.public_id == primary_public_id
 
@@ -470,6 +532,12 @@ def set_primary_listing_media(
 
     active_media = _active_media(listing)
     selected_media = _get_listing_media_or_404(listing=listing, media_public_id=media_public_id)
+    if selected_media.media_type != MediaType.IMAGE:
+        raise AppError(
+            status_code=400,
+            code="primary_media_must_be_image",
+            message="Only image media can be selected as the primary property photo.",
+        )
     for media in active_media:
         media.is_primary = media.public_id == selected_media.public_id
     session.flush()
@@ -498,14 +566,24 @@ def delete_listing_media(
             code="listing_requires_media",
             message="This listing status requires at least one active media item.",
         )
+    if media.media_type == MediaType.IMAGE and listing.status in {ListingStatus.PUBLISHED, ListingStatus.PENDING_REVIEW, ListingStatus.INACTIVE}:
+        remaining_images = [
+            item for item in active_media if item.public_id != media.public_id and item.media_type == MediaType.IMAGE
+        ]
+        if not remaining_images:
+            raise AppError(
+                status_code=409,
+                code="listing_requires_primary_image",
+                message="Published property listings must keep at least one image.",
+            )
 
     media.deleted_at = utcnow()
     delete_storage_key(settings=settings, storage_key=media.storage_key)
     remaining = [item for item in active_media if item.public_id != media.public_id]
-    if media.is_primary and remaining:
-        remaining.sort(key=lambda item: item.sort_order)
-        remaining[0].is_primary = True
-    _move_listing_to_pending_review_if_needed(listing)
+    if media.is_primary:
+        next_primary = next((item for item in sorted(remaining, key=lambda item: item.sort_order) if item.media_type == MediaType.IMAGE), None)
+        if next_primary is not None:
+            next_primary.is_primary = True
     session.flush()
 
 
@@ -516,9 +594,6 @@ def list_moderation_queue(
     filters: ListingQueryParams,
 ) -> PaginatedListingsResponseSchema:
     effective_filters = filters.model_copy()
-    if effective_filters.status is None:
-        effective_filters.status = ListingStatus.PENDING_REVIEW
-
     base_query = select(Listing.id).where(Listing.deleted_at.is_(None))
     base_query = _apply_common_listing_filters(
         session,
@@ -540,42 +615,57 @@ def review_listing(
     user_agent: str | None = None,
 ) -> ListingDetailSchema:
     listing = _get_listing_or_404(session, listing_public_id=listing_public_id)
-    if listing.status != ListingStatus.PENDING_REVIEW:
+    if listing.status == ListingStatus.SOLD and payload.action != "archive":
         raise AppError(
             status_code=409,
             code="invalid_listing_transition",
-            message="Only pending-review listings can be moderated.",
+            message="Sold listings can only be archived by moderation.",
         )
-
     before_json = _listing_snapshot(listing)
-    if payload.action == "approve":
-        _ensure_listing_has_media(listing)
-        _validate_existing_attribute_values(listing=listing, category=listing.category)
+    if payload.action == "publish":
+        _ensure_listing_publishable(listing)
         listing.status = ListingStatus.PUBLISHED
-        listing.published_at = utcnow()
-        listing.moderation_note = payload.moderation_note
+        listing.moderation_note = payload.moderation_note.strip() if payload.moderation_note else None
+        if listing.published_at is None:
+            listing.published_at = utcnow()
+        notify_listing_reviewed(
+            session,
+            user=listing.seller,
+            listing_public_id=listing.public_id,
+            listing_title=listing.title,
+            approved=True,
+            moderation_note=payload.moderation_note,
+        )
+    elif payload.action == "hide":
+        listing.status = ListingStatus.INACTIVE
+        listing.moderation_note = payload.moderation_note.strip() if payload.moderation_note else None
+    elif payload.action == "archive":
+        listing.status = ListingStatus.ARCHIVED
+        listing.moderation_note = payload.moderation_note.strip() if payload.moderation_note else None
+    elif payload.action == "send_to_review":
+        listing.status = ListingStatus.PENDING_REVIEW
+        listing.moderation_note = payload.moderation_note.strip() if payload.moderation_note else None
     else:
         listing.status = ListingStatus.REJECTED
         listing.published_at = None
-        listing.moderation_note = payload.moderation_note
-
-    notify_listing_reviewed(
-        session,
-        user=listing.seller,
-        listing_public_id=listing.public_id,
-        listing_title=listing.title,
-        approved=payload.action == "approve",
-        moderation_note=payload.moderation_note,
-    )
+        listing.moderation_note = payload.moderation_note.strip() if payload.moderation_note else None
+        notify_listing_reviewed(
+            session,
+            user=listing.seller,
+            listing_public_id=listing.public_id,
+            listing_title=listing.title,
+            approved=False,
+            moderation_note=payload.moderation_note,
+        )
 
     session.flush()
     record_admin_audit_log(
         session,
         actor=actor,
-        action=f"listing.review.{payload.action}",
+        action=f"listing.moderation.{payload.action}",
         entity_type="listing",
         entity_id=listing.public_id,
-        description=f"{payload.action.title()}d listing '{listing.title}'.",
+        description=f"{payload.action.replace('_', ' ').title()} listing '{listing.title}'.",
         ip_address=ip_address,
         user_agent=user_agent,
         before_json=before_json,
@@ -586,7 +676,8 @@ def review_listing(
         listing=_get_listing_or_404(session, listing_public_id=listing.public_id),
         locale=locale,
         is_promoted=_active_promotion_map(session, [listing.id]).get(listing.id, False),
-        promotion_state=_active_promotion_state_map(session, [listing.id]).get(listing.id),
+        promotion_state=_active_promotion_state_map(session, [listing.id], locale=locale).get(listing.id),
+        include_exact_address=True,
     )
 
 
@@ -894,13 +985,59 @@ def _move_listing_to_pending_review_if_needed(listing: Listing) -> None:
         _move_listing_to_pending_review(listing)
 
 
+def _ensure_listing_publishable(listing: Listing) -> None:
+    _ensure_listing_has_media(listing)
+    _validate_existing_attribute_values(listing=listing, category=listing.category)
+    _validate_listing_real_estate_shape(listing)
+
+
 def _ensure_listing_has_media(listing: Listing) -> None:
-    if not _active_media(listing):
+    media_items = _active_media(listing)
+    if not media_items:
         raise AppError(
             status_code=400,
             code="listing_requires_media",
             message="Listing must have at least one active media item.",
         )
+    if not any(media.media_type == MediaType.IMAGE for media in media_items):
+        raise AppError(
+            status_code=400,
+            code="listing_requires_primary_image",
+            message="Property listings require at least one image.",
+        )
+
+
+def _validate_listing_real_estate_shape(listing: Listing) -> None:
+    if listing.property_type.value == "apartment" and listing.total_floors is None:
+        raise AppError(
+            status_code=400,
+            code="total_floors_required",
+            message="Apartment listings require total_floors.",
+        )
+    if listing.total_floors is not None and listing.floor is not None and listing.floor > listing.total_floors:
+        raise AppError(
+            status_code=400,
+            code="invalid_floor_range",
+            message="floor cannot be greater than total_floors.",
+        )
+
+
+def _listing_media_upload_rules(upload: UploadFile) -> tuple[MediaType, int]:
+    if upload.content_type == "video/mp4":
+        return MediaType.VIDEO, MAX_LISTING_VIDEO_SIZE_BYTES
+    return MediaType.IMAGE, MAX_LISTING_IMAGE_SIZE_BYTES
+
+
+def _ensure_single_primary_image(listing: Listing) -> None:
+    active_media = sorted(_active_media(listing), key=lambda item: (item.sort_order, item.id))
+    primary_image = next((item for item in active_media if item.media_type == MediaType.IMAGE and item.is_primary), None)
+    if primary_image is not None:
+        for media in active_media:
+            media.is_primary = media.public_id == primary_image.public_id
+        return
+    fallback = next((item for item in active_media if item.media_type == MediaType.IMAGE), None)
+    for media in active_media:
+        media.is_primary = fallback is not None and media.public_id == fallback.public_id
 
 
 def _get_listing_media_or_404(*, listing: Listing, media_public_id: str) -> ListingMedia:
@@ -927,6 +1064,14 @@ def _can_view_listing(*, session: Session, listing: Listing, actor: User | None)
     if actor is not None and _is_admin(session, user=actor):
         return True
     return _is_publicly_available(listing)
+
+
+def _can_view_exact_listing_location(*, session: Session, listing: Listing, actor: User | None) -> bool:
+    if actor is None:
+        return False
+    if actor.id == listing.seller_id:
+        return True
+    return _is_admin(session, user=actor)
 
 
 def _is_publicly_available(listing: Listing) -> bool:
@@ -1003,11 +1148,22 @@ def _build_listing_summary_schema(
     return ListingSummarySchema(
         public_id=listing.public_id,
         title=listing.title,
+        purpose=listing.purpose,
+        property_type=listing.property_type,
         price_amount=listing.price_amount,
         currency_code=listing.currency_code,
         item_condition=listing.item_condition,
         status=listing.status,
         city=listing.city,
+        district=listing.district,
+        map_label=listing.map_label,
+        latitude=listing.latitude,
+        longitude=listing.longitude,
+        room_count=listing.room_count,
+        area_sqm=listing.area_sqm,
+        floor=listing.floor,
+        total_floors=listing.total_floors,
+        furnished=listing.furnished,
         category=_build_listing_category_schema(listing.category, locale=locale),
         seller=_build_listing_seller_schema(listing.seller),
         primary_media=_build_listing_media_schema(primary_media) if primary_media else None,
@@ -1026,6 +1182,7 @@ def _build_listing_detail_schema(
     locale: str,
     is_promoted: bool,
     promotion_state: ListingPromotionStateSchema | None = None,
+    include_exact_address: bool = False,
 ) -> ListingDetailSchema:
     summary = _build_listing_summary_schema(
         listing,
@@ -1036,6 +1193,7 @@ def _build_listing_detail_schema(
     return ListingDetailSchema(
         **summary.model_dump(),
         description=listing.description,
+        address_text=listing.address_text if include_exact_address else (listing.map_label or ", ".join([part for part in [listing.district, listing.city] if part])),
         moderation_note=listing.moderation_note,
         owner=_build_owner_card_schema(session, seller=listing.seller),
         media_items=[
@@ -1085,14 +1243,35 @@ def _apply_common_listing_filters(
         if category is None:
             raise AppError(status_code=404, code="category_not_found", message="Category was not found.")
         query = query.where(Listing.category_id == category.id)
+    if filters.purpose is not None:
+        query = query.where(Listing.purpose == filters.purpose)
+    if filters.property_type is not None:
+        query = query.where(Listing.property_type == filters.property_type)
     if filters.city:
         query = query.where(Listing.city.ilike(f"%{filters.city.strip()}%"))
+    if filters.district:
+        query = query.where(Listing.district.ilike(f"%{filters.district.strip()}%"))
     if filters.min_price is not None:
         query = query.where(Listing.price_amount >= filters.min_price)
     if filters.max_price is not None:
         query = query.where(Listing.price_amount <= filters.max_price)
+    if filters.min_area_sqm is not None:
+        query = query.where(Listing.area_sqm >= filters.min_area_sqm)
+    if filters.max_area_sqm is not None:
+        query = query.where(Listing.area_sqm <= filters.max_area_sqm)
+    if filters.room_count is not None:
+        query = query.where(Listing.room_count == filters.room_count)
     if include_status and filters.status is not None:
         query = query.where(Listing.status == filters.status)
+    if filters.reported_only:
+        query = query.where(
+            exists(
+                select(Report.id).where(
+                    Report.listing_id == Listing.id,
+                    Report.status.in_([ReportStatus.OPEN, ReportStatus.IN_REVIEW]),
+                )
+            )
+        )
     return query
 
 
@@ -1122,7 +1301,7 @@ def _paginate_listings(
     ).all()
     listing_ids = [row[0] for row in rows]
     promoted_map = {row[0]: bool(row[1]) for row in rows}
-    promotion_state_map = _active_promotion_state_map(session, listing_ids)
+    promotion_state_map = _active_promotion_state_map(session, listing_ids, locale=locale)
 
     listings = session.execute(_listing_query().where(Listing.id.in_(listing_ids))).scalars().all()
     listings_by_id = {listing.id: listing for listing in listings}
@@ -1187,7 +1366,12 @@ def _active_promotion_map(session: Session, listing_ids: list[int]) -> dict[int,
     return {listing_id: listing_id in promoted_set for listing_id in listing_ids}
 
 
-def _active_promotion_state_map(session: Session, listing_ids: list[int]) -> dict[int, ListingPromotionStateSchema]:
+def _active_promotion_state_map(
+    session: Session,
+    listing_ids: list[int],
+    *,
+    locale: str,
+) -> dict[int, ListingPromotionStateSchema]:
     if not listing_ids:
         return {}
     now = utcnow()
@@ -1209,7 +1393,7 @@ def _active_promotion_state_map(session: Session, listing_ids: list[int]) -> dic
     for promotion in promotions:
         if promotion.listing_id in promotion_map:
             continue
-        target_translation = _resolved_translation(promotion.target_category, locale="en") if promotion.target_category else None
+        target_translation = _resolved_translation(promotion.target_category, locale=locale) if promotion.target_category else None
         promotion_map[promotion.listing_id] = ListingPromotionStateSchema(
             public_id=promotion.public_id,
             package_public_id=promotion.package.public_id,

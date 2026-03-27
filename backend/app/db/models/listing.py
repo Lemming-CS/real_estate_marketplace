@@ -8,6 +8,7 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Integer,
     Index,
     JSON,
     Numeric,
@@ -18,7 +19,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
-from app.db.enums import ListingCondition, ListingStatus, MediaType
+from app.db.enums import ListingCondition, ListingPurpose, ListingStatus, MediaType, PropertyType
 from app.db.mixins import PublicIdMixin, SoftDeleteMixin, TimestampMixin
 
 
@@ -30,6 +31,10 @@ class Listing(PublicIdMixin, SoftDeleteMixin, TimestampMixin, Base):
         Index("ix_listings_status_published_at", "status", "published_at"),
         Index("ix_listings_status_city_published_at", "status", "city", "published_at"),
         Index("ix_listings_status_price_amount", "status", "price_amount"),
+        Index("ix_listings_purpose_property_status_published_at", "purpose", "property_type", "status", "published_at"),
+        Index("ix_listings_city_purpose_property_price", "city", "purpose", "property_type", "price_amount"),
+        Index("ix_listings_status_area_sqm", "status", "area_sqm"),
+        Index("ix_listings_status_room_count", "status", "room_count"),
         Index("ix_listings_title", "title"),
     )
 
@@ -38,11 +43,28 @@ class Listing(PublicIdMixin, SoftDeleteMixin, TimestampMixin, Base):
     category_id: Mapped[int] = mapped_column(ForeignKey("categories.id", ondelete="RESTRICT"), nullable=False)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
+    purpose: Mapped[ListingPurpose] = mapped_column(
+        Enum(
+            ListingPurpose,
+            values_callable=lambda enum_cls: [e.value for e in enum_cls],
+            native_enum=False,
+        ),
+        nullable=False,
+    )
+
+    property_type: Mapped[PropertyType] = mapped_column(
+        Enum(
+            PropertyType,
+            values_callable=lambda enum_cls: [e.value for e in enum_cls],
+            native_enum=False,
+        ),
+        nullable=False,
+    )
     price_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     currency_code: Mapped[str] = mapped_column(String(3), nullable=False, default="USD")
-    item_condition: Mapped[ListingCondition] = mapped_column(
+    item_condition: Mapped[ListingCondition | None] = mapped_column(
         Enum(ListingCondition, native_enum=False),
-        nullable=False,
+        nullable=True,
     )
     status: Mapped[ListingStatus] = mapped_column(
         Enum(ListingStatus, native_enum=False),
@@ -50,6 +72,16 @@ class Listing(PublicIdMixin, SoftDeleteMixin, TimestampMixin, Base):
         default=ListingStatus.DRAFT,
     )
     city: Mapped[str] = mapped_column(String(120), nullable=False)
+    district: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    address_text: Mapped[str] = mapped_column(String(255), nullable=False)
+    map_label: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    latitude: Mapped[Decimal] = mapped_column(Numeric(10, 7), nullable=False)
+    longitude: Mapped[Decimal] = mapped_column(Numeric(10, 7), nullable=False)
+    room_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    area_sqm: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    floor: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    total_floors: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    furnished: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     moderation_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 

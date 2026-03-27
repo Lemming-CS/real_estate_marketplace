@@ -1,7 +1,7 @@
-# Electronics Marketplace Assignment
+# Real Estate Marketplace Assignment
 
 ## Project Overview
-This repository is a monorepo-style foundation for a production-minded electronics marketplace with:
+This repository is a monorepo-style foundation for a production-minded real-estate marketplace with:
 
 - `backend/`: FastAPI service and business logic
 - `mobile/`: Flutter buyer/seller app
@@ -9,13 +9,13 @@ This repository is a monorepo-style foundation for a production-minded electroni
 - `docs/`: architecture, API, DB, and delivery plans
 - `infra/`: local infrastructure notes and placeholders
 
-The marketplace domain is electronics because it forces realistic handling of dynamic attributes, moderation, image-heavy listings, promotions, and transaction flows without turning the assignment into an unbounded general marketplace.
+The marketplace domain is now real estate, focused on apartment and house listings for rent and sale. The existing marketplace architecture was preserved and incrementally realigned so auth, messaging, reports, promotions, payments, and admin tooling still work against a stronger property-specific listing model.
 
 ## Current Status
-The repository now contains runnable starter scaffolding for backend and admin, plus a source-first Flutter structure that becomes runnable after generating platform folders with `flutter create`. Core business features are still intentionally unimplemented.
+The repository now contains a working backend/admin foundation with auth, profiles, listings, discovery, messaging, reports, promotions, payments, and admin operations aligned to a real-estate marketplace. Flutter mobile is still scaffolded for the next phase.
 
 ## Architecture Summary
-- Backend is the source of truth for auth, listings, moderation, promotions, orders, and audit logging.
+- Backend is the source of truth for auth, property listings, report-driven moderation, promotions, payments, messaging, and audit logging.
 - Mobile and admin are separate clients over explicit backend contracts.
 - MySQL is the transactional data store.
 - Docker Compose is used for local infrastructure and optional containerized backend/admin development.
@@ -141,14 +141,18 @@ These are the intended seed accounts once auth and seed data are implemented:
 
 | Role | Email | Password |
 | --- | --- | --- |
-| Buyer | `buyer.demo@example.com` | `DemoPass123!` |
-| Seller | `seller.demo@example.com` | `DemoPass123!` |
-| Admin | `admin.demo@example.com` | `DemoPass123!` |
+| Admin | `admin.demo@example.com` | `AdminPass123!` |
+| Renter / buyer | `renter.demo@example.com` | `RenterPass123!` |
+| Rental seller | `rent.host@example.com` | `RentHostPass123!` |
+| Sale seller | `sale.agent@example.com` | `SaleAgentPass123!` |
+| Suspended seller | `suspended.owner@example.com` | `SuspendedOwner123!` |
 
 ## Payments and Promotion Assumptions
 - Payments are modeled as a real domain.
 - MVP checkout can start with `cash_on_delivery`, `manual_transfer`, or sandbox/demo settlement.
 - Promotions must activate through backend flow, not direct database edits.
+- Property listings currently use direct publication by active sellers after validation; admin moderation is primarily report-driven.
+- Exact property coordinates are stored. Current backend responses expose map-aware location fields; future clients can choose whether to display full or approximate pins.
 
 ## Localization Plan
 - Initial target locales: `en` and `ru`
@@ -156,15 +160,15 @@ These are the intended seed accounts once auth and seed data are implemented:
 - Client-facing strings are externalized from the start
 
 ## Known Limitations
-- Core marketplace features are not implemented yet.
 - Flutter native platform folders are generated during local bootstrap rather than committed now.
-- Search will remain MySQL-backed for MVP before any external search engine is considered.
+- Search remains MySQL-backed for MVP before any external geospatial/search engine is considered.
+- Public property location privacy is currently a product-level tradeoff: exact coordinates are stored and returned, while exact address text is only returned to owners/admin in detail flows.
 
 ## Future Work
+- Seller/mobile property creation UX with map pin placement
+- Approximate-location privacy controls
+- Geocoding and map-based bounding-box search
 - MinIO-backed media storage
-- Full auth and seller onboarding
-- Listing moderation and promotion workflows
-- Orders, payments, and notifications
 - CI pipelines and deployment infrastructure
 
 ## How This Project Maps To The Assignment

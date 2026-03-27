@@ -6,7 +6,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-from app.db.enums import CategoryAttributeType, ListingCondition, ListingStatus, MediaType
+from app.db.enums import CategoryAttributeType, ListingCondition, ListingPurpose, ListingStatus, MediaType, PropertyType
 from app.shared.schemas import PaginationMetaSchema
 
 LocaleCode = Literal["en", "ru"]
@@ -40,22 +40,60 @@ class ListingCreateRequest(BaseModel):
     category_public_id: str
     title: str = Field(min_length=5, max_length=255)
     description: str = Field(min_length=20, max_length=5000)
+    purpose: ListingPurpose
+    property_type: PropertyType
     price_amount: Decimal = Field(gt=0, max_digits=12, decimal_places=2)
     currency_code: str = Field(default="USD", min_length=3, max_length=3)
-    item_condition: ListingCondition
     city: str = Field(min_length=2, max_length=120)
+    district: str | None = Field(default=None, max_length=120)
+    address_text: str = Field(min_length=5, max_length=255)
+    map_label: str | None = Field(default=None, max_length=120)
+    latitude: Decimal = Field(ge=-90, le=90, max_digits=10, decimal_places=7)
+    longitude: Decimal = Field(ge=-180, le=180, max_digits=10, decimal_places=7)
+    room_count: int = Field(ge=1, le=50)
+    area_sqm: Decimal = Field(gt=0, max_digits=10, decimal_places=2)
+    floor: int | None = Field(default=None, ge=0, le=200)
+    total_floors: int | None = Field(default=None, ge=1, le=300)
+    furnished: bool | None = None
+    item_condition: ListingCondition | None = None
     attribute_values: list[ListingAttributeValueInput] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_real_estate_fields(self) -> "ListingCreateRequest":
+        if self.total_floors is not None and self.floor is not None and self.floor > self.total_floors:
+            raise ValueError("floor cannot be greater than total_floors.")
+        if self.property_type == PropertyType.APARTMENT and self.total_floors is None:
+            raise ValueError("Apartment listings require total_floors.")
+        return self
 
 
 class ListingUpdateRequest(BaseModel):
     category_public_id: str | None = None
     title: str | None = Field(default=None, min_length=5, max_length=255)
     description: str | None = Field(default=None, min_length=20, max_length=5000)
+    purpose: ListingPurpose | None = None
+    property_type: PropertyType | None = None
     price_amount: Decimal | None = Field(default=None, gt=0, max_digits=12, decimal_places=2)
     currency_code: str | None = Field(default=None, min_length=3, max_length=3)
-    item_condition: ListingCondition | None = None
     city: str | None = Field(default=None, min_length=2, max_length=120)
+    district: str | None = Field(default=None, max_length=120)
+    address_text: str | None = Field(default=None, min_length=5, max_length=255)
+    map_label: str | None = Field(default=None, max_length=120)
+    latitude: Decimal | None = Field(default=None, ge=-90, le=90, max_digits=10, decimal_places=7)
+    longitude: Decimal | None = Field(default=None, ge=-180, le=180, max_digits=10, decimal_places=7)
+    room_count: int | None = Field(default=None, ge=1, le=50)
+    area_sqm: Decimal | None = Field(default=None, gt=0, max_digits=10, decimal_places=2)
+    floor: int | None = Field(default=None, ge=0, le=200)
+    total_floors: int | None = Field(default=None, ge=1, le=300)
+    furnished: bool | None = None
+    item_condition: ListingCondition | None = None
     attribute_values: list[ListingAttributeValueInput] | None = None
+
+    @model_validator(mode="after")
+    def validate_floor_range(self) -> "ListingUpdateRequest":
+        if self.total_floors is not None and self.floor is not None and self.floor > self.total_floors:
+            raise ValueError("floor cannot be greater than total_floors.")
+        return self
 
 
 class ListingMediaOrderRequest(BaseModel):
@@ -63,25 +101,32 @@ class ListingMediaOrderRequest(BaseModel):
 
 
 class ModerationReviewRequest(BaseModel):
-    action: Literal["approve", "reject"]
+    action: Literal["publish", "hide", "archive", "reject", "send_to_review"]
     moderation_note: str | None = Field(default=None, max_length=1000)
 
     @model_validator(mode="after")
     def validate_rejection_note(self) -> "ModerationReviewRequest":
-        if self.action == "reject" and not self.moderation_note:
-            raise ValueError("A moderation note is required when rejecting a listing.")
+        if self.action in {"reject", "hide", "archive", "send_to_review"} and not self.moderation_note:
+            raise ValueError("A moderation note is required for this moderation action.")
         return self
 
 
 class ListingQueryParams(BaseModel):
     query: str | None = Field(default=None, max_length=120)
     category_public_id: str | None = None
+    purpose: ListingPurpose | None = None
+    property_type: PropertyType | None = None
     city: str | None = Field(default=None, max_length=120)
+    district: str | None = Field(default=None, max_length=120)
     min_price: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
     max_price: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
+    min_area_sqm: Decimal | None = Field(default=None, ge=0, max_digits=10, decimal_places=2)
+    max_area_sqm: Decimal | None = Field(default=None, ge=0, max_digits=10, decimal_places=2)
+    room_count: int | None = Field(default=None, ge=1, le=50)
     status: ListingStatus | None = None
     sort: ListingSortOption = "newest"
     promoted_first: bool = False
+    reported_only: bool = False
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=20, ge=1, le=50)
 
@@ -89,6 +134,8 @@ class ListingQueryParams(BaseModel):
     def validate_price_range(self) -> "ListingQueryParams":
         if self.min_price is not None and self.max_price is not None and self.min_price > self.max_price:
             raise ValueError("min_price cannot be greater than max_price.")
+        if self.min_area_sqm is not None and self.max_area_sqm is not None and self.min_area_sqm > self.max_area_sqm:
+            raise ValueError("min_area_sqm cannot be greater than max_area_sqm.")
         return self
 
 
@@ -153,11 +200,22 @@ class ListingAttributeValueSchema(BaseModel):
 class ListingSummarySchema(BaseModel):
     public_id: str
     title: str
+    purpose: ListingPurpose
+    property_type: PropertyType
     price_amount: Decimal
     currency_code: str
-    item_condition: ListingCondition
+    item_condition: ListingCondition | None = None
     status: ListingStatus
     city: str
+    district: str | None = None
+    map_label: str | None = None
+    latitude: Decimal
+    longitude: Decimal
+    room_count: int
+    area_sqm: Decimal
+    floor: int | None = None
+    total_floors: int | None = None
+    furnished: bool | None = None
     category: ListingCategorySummarySchema
     seller: ListingSellerSummarySchema
     primary_media: ListingMediaSchema | None = None
@@ -170,6 +228,7 @@ class ListingSummarySchema(BaseModel):
 
 class ListingDetailSchema(ListingSummarySchema):
     description: str
+    address_text: str
     moderation_note: str | None = None
     owner: ListingOwnerCardSchema
     media_items: list[ListingMediaSchema]

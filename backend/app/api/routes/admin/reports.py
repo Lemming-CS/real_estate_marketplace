@@ -23,13 +23,22 @@ def _client_ip(request: Request) -> str | None:
 )
 def reports_queue(
     status: ReportStatus | None = Query(default=None),
+    listing_public_id: str | None = Query(default=None),
+    reported_user_public_id: str | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=50),
     db: Session = Depends(get_db),
     _: User = Depends(require_account_status(UserStatus.ACTIVE)),
     __: User = Depends(require_roles(RoleCode.ADMIN)),
 ) -> PaginatedReportsResponseSchema:
-    return list_admin_reports(db, status=status, page=page, page_size=page_size)
+    return list_admin_reports(
+        db,
+        status=status,
+        listing_public_id=listing_public_id,
+        reported_user_public_id=reported_user_public_id,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.post(

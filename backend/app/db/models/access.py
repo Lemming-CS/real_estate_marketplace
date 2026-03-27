@@ -117,3 +117,5 @@ class UserStatusHistory(TimestampMixin, Base):
         nullable=True,
     )
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    changed_by: Mapped["User | None"] = relationship(foreign_keys=[changed_by_user_id])

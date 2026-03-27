@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_optional_current_user, require_account_status
 from app.core.config import Settings, get_settings
-from app.db.enums import ListingStatus, UserStatus
+from app.db.enums import ListingPurpose, ListingStatus, PropertyType, UserStatus
 from app.db.models import User
 from app.modules.auth.schemas import MessageResponse
 from app.modules.listings.schemas import (
@@ -32,6 +32,7 @@ from app.modules.listings.service import (
     list_owner_discovery_listings,
     list_public_listings,
     mark_listing_sold,
+    publish_listing,
     reactivate_listing,
     reorder_listing_media,
     replace_listing_media,
@@ -68,9 +69,15 @@ def _validated_listing_filters(**data) -> ListingQueryParams:
 def _public_listing_filters(
     q: str | None = Query(default=None),
     category_public_id: str | None = Query(default=None),
+    purpose: ListingPurpose | None = Query(default=None),
+    property_type: PropertyType | None = Query(default=None),
     city: str | None = Query(default=None),
+    district: str | None = Query(default=None),
     min_price: Decimal | None = Query(default=None),
     max_price: Decimal | None = Query(default=None),
+    min_area_sqm: Decimal | None = Query(default=None),
+    max_area_sqm: Decimal | None = Query(default=None),
+    room_count: int | None = Query(default=None, ge=1, le=50),
     sort: ListingSortOption = Query(default="newest"),
     promoted_first: bool = Query(default=True),
     page: int = Query(default=1, ge=1),
@@ -79,9 +86,15 @@ def _public_listing_filters(
     return _validated_listing_filters(
         query=q,
         category_public_id=category_public_id,
+        purpose=purpose,
+        property_type=property_type,
         city=city,
+        district=district,
         min_price=min_price,
         max_price=max_price,
+        min_area_sqm=min_area_sqm,
+        max_area_sqm=max_area_sqm,
+        room_count=room_count,
         sort=sort,
         promoted_first=promoted_first,
         page=page,
@@ -92,9 +105,15 @@ def _public_listing_filters(
 def _owner_listing_filters(
     q: str | None = Query(default=None),
     category_public_id: str | None = Query(default=None),
+    purpose: ListingPurpose | None = Query(default=None),
+    property_type: PropertyType | None = Query(default=None),
     city: str | None = Query(default=None),
+    district: str | None = Query(default=None),
     min_price: Decimal | None = Query(default=None),
     max_price: Decimal | None = Query(default=None),
+    min_area_sqm: Decimal | None = Query(default=None),
+    max_area_sqm: Decimal | None = Query(default=None),
+    room_count: int | None = Query(default=None, ge=1, le=50),
     status: ListingStatus | None = Query(default=None),
     sort: ListingSortOption = Query(default="newest"),
     promoted_first: bool = Query(default=False),
@@ -104,9 +123,15 @@ def _owner_listing_filters(
     return _validated_listing_filters(
         query=q,
         category_public_id=category_public_id,
+        purpose=purpose,
+        property_type=property_type,
         city=city,
+        district=district,
         min_price=min_price,
         max_price=max_price,
+        min_area_sqm=min_area_sqm,
+        max_area_sqm=max_area_sqm,
+        room_count=room_count,
         status=status,
         sort=sort,
         promoted_first=promoted_first,
@@ -193,9 +218,24 @@ def update_listing_endpoint(
 
 
 @router.post(
+    "/{listing_public_id}/publish",
+    response_model=ListingStatusSchema,
+    summary="Publish a listing directly when validation passes",
+)
+def publish_listing_endpoint(
+    listing_public_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_account_status(UserStatus.ACTIVE)),
+) -> ListingStatusSchema:
+    response = publish_listing(db, listing_public_id=listing_public_id, actor=current_user)
+    db.commit()
+    return response
+
+
+@router.post(
     "/{listing_public_id}/submit-review",
     response_model=ListingStatusSchema,
-    summary="Submit a listing for moderation review",
+    summary="Legacy alias for publish; active sellers can publish directly when validation passes",
 )
 def submit_review_endpoint(
     listing_public_id: str,

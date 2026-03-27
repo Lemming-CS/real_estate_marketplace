@@ -60,6 +60,29 @@ def simulate_payment(
 
 
 @router.get(
+    "/{payment_public_id}/checkout",
+    response_model=PaymentSimulationResponseSchema,
+    summary="Complete a mock checkout flow through a functional GET endpoint",
+)
+def complete_mock_checkout(
+    payment_public_id: str,
+    result: str = Query(default="successful"),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+    current_user: User = Depends(require_account_status(UserStatus.ACTIVE)),
+) -> PaymentSimulationResponseSchema:
+    response = simulate_payment_result(
+        db,
+        settings=settings,
+        payment_public_id=payment_public_id,
+        payload=PaymentSimulationRequest(result=result),
+        actor=current_user,
+    )
+    db.commit()
+    return response
+
+
+@router.get(
     "",
     response_model=PaginatedPaymentsResponseSchema,
     summary="List the authenticated user's payment transaction history",

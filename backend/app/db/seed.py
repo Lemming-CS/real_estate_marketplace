@@ -12,6 +12,7 @@ from app.db.enums import (
     CategoryAttributeType,
     ConversationStatus,
     ListingCondition,
+    ListingPurpose,
     ListingStatus,
     MediaType,
     MessageStatus,
@@ -19,6 +20,7 @@ from app.db.enums import (
     NotificationStatus,
     PaymentStatus,
     PaymentType,
+    PropertyType,
     PromotionStatus,
     ReportStatus,
     RoleCode,
@@ -45,15 +47,20 @@ from app.db.models import (
     Role,
     User,
     UserRole,
+    UserStatusHistory,
 )
 from app.db.session import session_scope
 
 ADMIN_EMAIL = "admin.demo@example.com"
 ADMIN_PASSWORD = "AdminPass123!"
-BUYER_EMAIL = "buyer.demo@example.com"
-BUYER_PASSWORD = "BuyerPass123!"
-SELLER_EMAIL = "seller.demo@example.com"
-SELLER_PASSWORD = "SellerPass123!"
+RENTER_EMAIL = "renter.demo@example.com"
+RENTER_PASSWORD = "RenterPass123!"
+RENT_SELLER_EMAIL = "rent.host@example.com"
+RENT_SELLER_PASSWORD = "RentHostPass123!"
+SALE_SELLER_EMAIL = "sale.agent@example.com"
+SALE_SELLER_PASSWORD = "SaleAgentPass123!"
+SUSPENDED_SELLER_EMAIL = "suspended.owner@example.com"
+SUSPENDED_SELLER_PASSWORD = "SuspendedOwner123!"
 
 
 def utcnow() -> datetime:
@@ -249,10 +256,22 @@ def get_or_create_listing(
     category: Category,
     title: str,
     description: str,
+    purpose: ListingPurpose,
+    property_type: PropertyType,
     price_amount: Decimal,
-    item_condition: ListingCondition,
+    item_condition: ListingCondition | None,
     status: ListingStatus,
     city: str,
+    district: str | None,
+    address_text: str,
+    map_label: str | None,
+    latitude: Decimal,
+    longitude: Decimal,
+    room_count: int,
+    area_sqm: Decimal,
+    floor: int | None = None,
+    total_floors: int | None = None,
+    furnished: bool | None = None,
     moderation_note: str | None = None,
     published_at: datetime | None = None,
 ) -> Listing:
@@ -263,10 +282,22 @@ def get_or_create_listing(
             category_id=category.id,
             title=title,
             description=description,
+            purpose=purpose,
+            property_type=property_type,
             price_amount=price_amount,
             item_condition=item_condition,
             status=status,
             city=city,
+            district=district,
+            address_text=address_text,
+            map_label=map_label,
+            latitude=latitude,
+            longitude=longitude,
+            room_count=room_count,
+            area_sqm=area_sqm,
+            floor=floor,
+            total_floors=total_floors,
+            furnished=furnished,
             moderation_note=moderation_note,
             published_at=published_at,
         )
@@ -276,10 +307,22 @@ def get_or_create_listing(
         listing.seller_id = seller.id
         listing.category_id = category.id
         listing.description = description
+        listing.purpose = purpose
+        listing.property_type = property_type
         listing.price_amount = price_amount
         listing.item_condition = item_condition
         listing.status = status
         listing.city = city
+        listing.district = district
+        listing.address_text = address_text
+        listing.map_label = map_label
+        listing.latitude = latitude
+        listing.longitude = longitude
+        listing.room_count = room_count
+        listing.area_sqm = area_sqm
+        listing.floor = floor
+        listing.total_floors = total_floors
+        listing.furnished = furnished
         listing.moderation_note = moderation_note
         listing.published_at = published_at
     return listing
@@ -291,6 +334,7 @@ def upsert_listing_media(
     listing: Listing,
     sort_order: int,
     storage_key: str,
+    media_type: MediaType = MediaType.IMAGE,
     mime_type: str = "image/jpeg",
     is_primary: bool = False,
 ) -> None:
@@ -304,7 +348,7 @@ def upsert_listing_media(
         session.add(
             ListingMedia(
                 listing_id=listing.id,
-                media_type=MediaType.IMAGE,
+                media_type=media_type,
                 storage_key=storage_key,
                 mime_type=mime_type,
                 sort_order=sort_order,
@@ -313,6 +357,7 @@ def upsert_listing_media(
         )
         return
 
+    media.media_type = media_type
     media.storage_key = storage_key
     media.mime_type = mime_type
     media.is_primary = is_primary
@@ -639,7 +684,7 @@ def seed_demo_data() -> None:
     with session_scope() as session:
         admin_role = get_or_create_role(session, RoleCode.ADMIN, "Administrator", "Back office administrator")
         user_role = get_or_create_role(session, RoleCode.USER, "User", "Marketplace customer")
-        seller_role = get_or_create_role(session, RoleCode.SELLER, "Seller", "Seller with listing access")
+        seller_role = get_or_create_role(session, RoleCode.SELLER, "Seller", "Property owner or agency account")
 
         admin = get_or_create_user(
             session,
@@ -652,364 +697,537 @@ def seed_demo_data() -> None:
             status=UserStatus.ACTIVE,
             verified=True,
         )
-        buyer = get_or_create_user(
+        renter = get_or_create_user(
             session,
-            email=BUYER_EMAIL,
-            username="buyer_demo",
-            full_name="Buyer Demo",
+            email=RENTER_EMAIL,
+            username="renter_demo",
+            full_name="Renter Demo",
             phone="+15550000002",
-            password=BUYER_PASSWORD,
+            password=RENTER_PASSWORD,
             locale="en",
             status=UserStatus.ACTIVE,
             verified=True,
         )
-        seller = get_or_create_user(
+        rent_seller = get_or_create_user(
             session,
-            email=SELLER_EMAIL,
-            username="seller_demo",
-            full_name="Seller Demo",
+            email=RENT_SELLER_EMAIL,
+            username="rent_host_demo",
+            full_name="Rent Host Demo",
             phone="+15550000003",
-            password=SELLER_PASSWORD,
+            password=RENT_SELLER_PASSWORD,
             locale="en",
             status=UserStatus.ACTIVE,
+            verified=True,
+        )
+        sale_seller = get_or_create_user(
+            session,
+            email=SALE_SELLER_EMAIL,
+            username="sale_agent_demo",
+            full_name="Sale Agent Demo",
+            phone="+15550000004",
+            password=SALE_SELLER_PASSWORD,
+            locale="ru",
+            status=UserStatus.ACTIVE,
+            verified=True,
+        )
+        suspended_seller = get_or_create_user(
+            session,
+            email=SUSPENDED_SELLER_EMAIL,
+            username="suspended_owner_demo",
+            full_name="Suspended Owner Demo",
+            phone="+15550000005",
+            password=SUSPENDED_SELLER_PASSWORD,
+            locale="en",
+            status=UserStatus.SUSPENDED,
             verified=True,
         )
 
         ensure_user_role(session, admin, admin_role)
-        ensure_user_role(session, buyer, user_role)
-        ensure_user_role(session, seller, user_role)
-        ensure_user_role(session, seller, seller_role)
+        ensure_user_role(session, renter, user_role)
+        ensure_user_role(session, rent_seller, user_role)
+        ensure_user_role(session, rent_seller, seller_role)
+        ensure_user_role(session, sale_seller, user_role)
+        ensure_user_role(session, sale_seller, seller_role)
+        ensure_user_role(session, suspended_seller, user_role)
+        ensure_user_role(session, suspended_seller, seller_role)
         session.flush()
 
-        electronics = get_or_create_category(
+        real_estate = get_or_create_category(
             session,
-            slug="electronics",
-            internal_name="Electronics",
+            slug="real-estate",
+            internal_name="Real Estate",
             sort_order=1,
         )
-        smartphones = get_or_create_category(
+        apartments = get_or_create_category(
             session,
-            slug="smartphones",
-            internal_name="Smartphones",
-            parent=electronics,
+            slug="apartments",
+            internal_name="Apartments",
+            parent=real_estate,
             sort_order=10,
         )
-        laptops = get_or_create_category(
+        houses = get_or_create_category(
             session,
-            slug="laptops",
-            internal_name="Laptops",
-            parent=electronics,
+            slug="houses",
+            internal_name="Houses",
+            parent=real_estate,
             sort_order=20,
         )
 
         for category, en_name, ru_name in [
-            (electronics, "Electronics", "Elektronika"),
-            (smartphones, "Smartphones", "Smartfony"),
-            (laptops, "Laptops", "Noutbuki"),
+            (real_estate, "Real Estate", "Nedvizhimost"),
+            (apartments, "Apartments", "Kvartiry"),
+            (houses, "Houses", "Doma"),
         ]:
             upsert_category_translation(
                 session,
                 category=category,
                 locale="en",
                 name=en_name,
-                description=f"{en_name} category",
+                description=f"{en_name} listings",
             )
             upsert_category_translation(
                 session,
                 category=category,
                 locale="ru",
                 name=ru_name,
-                description=f"{ru_name} kategoriya",
+                description=f"{ru_name} ob" "yavleniya",
             )
 
-        phone_brand = get_or_create_category_attribute(
+        apartment_bathrooms = get_or_create_category_attribute(
             session,
-            category=smartphones,
-            code="brand",
-            display_name="Brand",
-            data_type=CategoryAttributeType.SELECT,
+            category=apartments,
+            code="bathrooms",
+            display_name="Bathrooms",
+            data_type=CategoryAttributeType.NUMBER,
             unit=None,
             is_required=True,
             is_filterable=True,
             sort_order=1,
         )
-        phone_storage = get_or_create_category_attribute(
+        apartment_heating = get_or_create_category_attribute(
             session,
-            category=smartphones,
-            code="storage_gb",
-            display_name="Storage",
-            data_type=CategoryAttributeType.NUMBER,
-            unit="GB",
+            category=apartments,
+            code="heating_type",
+            display_name="Heating type",
+            data_type=CategoryAttributeType.SELECT,
+            unit=None,
             is_required=True,
             is_filterable=True,
             sort_order=2,
         )
-        laptop_ram = get_or_create_category_attribute(
+        apartment_pet_friendly = get_or_create_category_attribute(
             session,
-            category=laptops,
-            code="ram_gb",
-            display_name="RAM",
+            category=apartments,
+            code="pet_friendly",
+            display_name="Pet friendly",
+            data_type=CategoryAttributeType.BOOLEAN,
+            unit=None,
+            is_required=False,
+            is_filterable=True,
+            sort_order=3,
+        )
+        house_bathrooms = get_or_create_category_attribute(
+            session,
+            category=houses,
+            code="bathrooms",
+            display_name="Bathrooms",
             data_type=CategoryAttributeType.NUMBER,
-            unit="GB",
+            unit=None,
             is_required=True,
             is_filterable=True,
             sort_order=1,
         )
-        laptop_screen = get_or_create_category_attribute(
+        house_lot_size = get_or_create_category_attribute(
             session,
-            category=laptops,
-            code="screen_inches",
-            display_name="Screen size",
+            category=houses,
+            code="lot_size_sqm",
+            display_name="Lot size",
             data_type=CategoryAttributeType.NUMBER,
-            unit="in",
-            is_required=True,
+            unit="sqm",
+            is_required=False,
             is_filterable=True,
             sort_order=2,
         )
+        house_parking = get_or_create_category_attribute(
+            session,
+            category=houses,
+            code="parking",
+            display_name="Parking available",
+            data_type=CategoryAttributeType.BOOLEAN,
+            unit=None,
+            is_required=False,
+            is_filterable=True,
+            sort_order=3,
+        )
 
-        for index, brand in enumerate(["Apple", "Samsung", "Google"], start=1):
+        for index, heating_type in enumerate(["central", "gas", "electric"], start=1):
             upsert_attribute_option(
                 session,
-                attribute=phone_brand,
-                option_value=brand.lower(),
-                option_label=brand,
+                attribute=apartment_heating,
+                option_value=heating_type,
+                option_label=heating_type.replace("_", " ").title(),
                 sort_order=index,
             )
 
-        iphone_listing = get_or_create_listing(
+        rent_apartment_listing = get_or_create_listing(
             session,
-            seller=seller,
-            category=smartphones,
-            title="iPhone 14 Pro 256GB",
-            description="Clean condition, battery health at 91%, box included.",
-            price_amount=Decimal("899.00"),
-            item_condition=ListingCondition.LIKE_NEW,
+            seller=rent_seller,
+            category=apartments,
+            title="2-room apartment near Ala-Too Square",
+            description="Bright furnished apartment with renovated kitchen, balcony, and fast internet. Suitable for long-term rent.",
+            purpose=ListingPurpose.RENT,
+            property_type=PropertyType.APARTMENT,
+            price_amount=Decimal("850.00"),
+            item_condition=None,
             status=ListingStatus.PUBLISHED,
             city="Bishkek",
+            district="Lenin District",
+            address_text="105 Chui Avenue, Bishkek",
+            map_label="Ala-Too Square area",
+            latitude=Decimal("42.8746210"),
+            longitude=Decimal("74.5697620"),
+            room_count=2,
+            area_sqm=Decimal("68.00"),
+            floor=7,
+            total_floors=12,
+            furnished=True,
             published_at=utcnow() - timedelta(days=3),
         )
-        thinkpad_listing = get_or_create_listing(
+        sale_house_listing = get_or_create_listing(
             session,
-            seller=seller,
-            category=laptops,
-            title="Lenovo ThinkPad X1 Carbon Gen 9",
-            description="Business laptop with 16GB RAM and 512GB SSD.",
-            price_amount=Decimal("1190.00"),
-            item_condition=ListingCondition.USED_GOOD,
+            seller=sale_seller,
+            category=houses,
+            title="Family house with garden in Kok-Jar",
+            description="Spacious detached house with private yard, updated heating, and covered parking. Ready for immediate sale.",
+            purpose=ListingPurpose.SALE,
+            property_type=PropertyType.HOUSE,
+            price_amount=Decimal("185000.00"),
+            item_condition=None,
             status=ListingStatus.PUBLISHED,
             city="Bishkek",
+            district="Kok-Jar",
+            address_text="14 Kok-Jar Street, Bishkek",
+            map_label="Kok-Jar residential area",
+            latitude=Decimal("42.8413500"),
+            longitude=Decimal("74.6408500"),
+            room_count=5,
+            area_sqm=Decimal("210.00"),
+            floor=2,
+            total_floors=2,
+            furnished=False,
             published_at=utcnow() - timedelta(days=2),
         )
-        samsung_listing = get_or_create_listing(
+        reported_apartment_listing = get_or_create_listing(
             session,
-            seller=seller,
-            category=smartphones,
-            title="Samsung Galaxy S24 128GB",
-            description="Freshly listed device with warranty card and original charger.",
-            price_amount=Decimal("720.00"),
-            item_condition=ListingCondition.NEW,
-            status=ListingStatus.PENDING_REVIEW,
+            seller=sale_seller,
+            category=apartments,
+            title="1-room apartment advertised below market",
+            description="Compact apartment listed for urgent sale. Reported by a user for suspicious pricing and incomplete disclosure.",
+            purpose=ListingPurpose.SALE,
+            property_type=PropertyType.APARTMENT,
+            price_amount=Decimal("38000.00"),
+            item_condition=None,
+            status=ListingStatus.PUBLISHED,
             city="Bishkek",
-            moderation_note=None,
+            district="Sverdlov District",
+            address_text="22 Toktogul Street, Bishkek",
+            map_label="Toktogul / Isanova area",
+            latitude=Decimal("42.8799400"),
+            longitude=Decimal("74.5901500"),
+            room_count=1,
+            area_sqm=Decimal("34.00"),
+            floor=4,
+            total_floors=5,
+            furnished=False,
         )
-        draft_laptop_listing = get_or_create_listing(
+        draft_house_listing = get_or_create_listing(
             session,
-            seller=seller,
-            category=laptops,
-            title="Dell XPS 15 Draft Listing",
-            description="Draft listing prepared for a high-spec laptop with RTX graphics.",
-            price_amount=Decimal("1450.00"),
-            item_condition=ListingCondition.LIKE_NEW,
+            seller=rent_seller,
+            category=houses,
+            title="Draft townhouse for rent in Asanbay",
+            description="Draft property listing waiting for final photos and owner confirmation before publication.",
+            purpose=ListingPurpose.RENT,
+            property_type=PropertyType.HOUSE,
+            price_amount=Decimal("1400.00"),
+            item_condition=None,
             status=ListingStatus.DRAFT,
             city="Bishkek",
+            district="Asanbay",
+            address_text="8 Asanbay Lane, Bishkek",
+            map_label="Asanbay area",
+            latitude=Decimal("42.8205500"),
+            longitude=Decimal("74.6152400"),
+            room_count=4,
+            area_sqm=Decimal("160.00"),
+            floor=2,
+            total_floors=2,
+            furnished=True,
+        )
+        suspended_listing = get_or_create_listing(
+            session,
+            seller=suspended_seller,
+            category=apartments,
+            title="Suspended seller apartment listing",
+            description="This listing belongs to a suspended seller account and should remain hidden from public discovery.",
+            purpose=ListingPurpose.RENT,
+            property_type=PropertyType.APARTMENT,
+            price_amount=Decimal("600.00"),
+            item_condition=None,
+            status=ListingStatus.INACTIVE,
+            city="Bishkek",
+            district="Oktyabr District",
+            address_text="77 Yunusaliev Avenue, Bishkek",
+            map_label="South district area",
+            latitude=Decimal("42.8427100"),
+            longitude=Decimal("74.6209100"),
+            room_count=2,
+            area_sqm=Decimal("56.00"),
+            floor=5,
+            total_floors=9,
+            furnished=True,
+            moderation_note="Seller account suspended after repeated policy complaints.",
         )
 
         upsert_listing_media(
             session,
-            listing=iphone_listing,
+            listing=rent_apartment_listing,
             sort_order=1,
-            storage_key="demo/listings/iphone-14-pro/front.jpg",
+            storage_key="demo/listings/rent-apartment/living-room.jpg",
             is_primary=True,
         )
         upsert_listing_media(
             session,
-            listing=iphone_listing,
+            listing=rent_apartment_listing,
             sort_order=2,
-            storage_key="demo/listings/iphone-14-pro/back.jpg",
+            storage_key="demo/listings/rent-apartment/bedroom.jpg",
         )
         upsert_listing_media(
             session,
-            listing=thinkpad_listing,
+            listing=rent_apartment_listing,
+            sort_order=3,
+            storage_key="demo/listings/rent-apartment/tour.mp4",
+            media_type=MediaType.VIDEO,
+            mime_type="video/mp4",
+        )
+        upsert_listing_media(
+            session,
+            listing=sale_house_listing,
             sort_order=1,
-            storage_key="demo/listings/thinkpad-x1/open.jpg",
+            storage_key="demo/listings/sale-house/front.jpg",
             is_primary=True,
         )
         upsert_listing_media(
             session,
-            listing=samsung_listing,
+            listing=sale_house_listing,
+            sort_order=2,
+            storage_key="demo/listings/sale-house/garden.jpg",
+        )
+        upsert_listing_media(
+            session,
+            listing=reported_apartment_listing,
             sort_order=1,
-            storage_key="demo/listings/galaxy-s24/front.jpg",
+            storage_key="demo/listings/reported-apartment/front.jpg",
             is_primary=True,
         )
         upsert_listing_media(
             session,
-            listing=draft_laptop_listing,
+            listing=draft_house_listing,
             sort_order=1,
-            storage_key="demo/listings/dell-xps-15/open.jpg",
+            storage_key="demo/listings/draft-house/front.jpg",
+            is_primary=True,
+        )
+        upsert_listing_media(
+            session,
+            listing=suspended_listing,
+            sort_order=1,
+            storage_key="demo/listings/suspended-listing/front.jpg",
             is_primary=True,
         )
 
         upsert_listing_attribute_value(
             session,
-            listing=iphone_listing,
-            attribute=phone_brand,
-            option_value="apple",
+            listing=rent_apartment_listing,
+            attribute=apartment_bathrooms,
+            numeric_value=Decimal("1"),
         )
         upsert_listing_attribute_value(
             session,
-            listing=iphone_listing,
-            attribute=phone_storage,
-            numeric_value=Decimal("256"),
+            listing=rent_apartment_listing,
+            attribute=apartment_heating,
+            option_value="central",
         )
         upsert_listing_attribute_value(
             session,
-            listing=thinkpad_listing,
-            attribute=laptop_ram,
-            numeric_value=Decimal("16"),
+            listing=rent_apartment_listing,
+            attribute=apartment_pet_friendly,
+            boolean_value=True,
         )
         upsert_listing_attribute_value(
             session,
-            listing=thinkpad_listing,
-            attribute=laptop_screen,
-            numeric_value=Decimal("14"),
+            listing=sale_house_listing,
+            attribute=house_bathrooms,
+            numeric_value=Decimal("2"),
         )
         upsert_listing_attribute_value(
             session,
-            listing=samsung_listing,
-            attribute=phone_brand,
-            option_value="samsung",
+            listing=sale_house_listing,
+            attribute=house_lot_size,
+            numeric_value=Decimal("380"),
         )
         upsert_listing_attribute_value(
             session,
-            listing=samsung_listing,
-            attribute=phone_storage,
-            numeric_value=Decimal("128"),
+            listing=sale_house_listing,
+            attribute=house_parking,
+            boolean_value=True,
         )
         upsert_listing_attribute_value(
             session,
-            listing=draft_laptop_listing,
-            attribute=laptop_ram,
-            numeric_value=Decimal("32"),
+            listing=reported_apartment_listing,
+            attribute=apartment_bathrooms,
+            numeric_value=Decimal("1"),
         )
         upsert_listing_attribute_value(
             session,
-            listing=draft_laptop_listing,
-            attribute=laptop_screen,
-            numeric_value=Decimal("15.6"),
+            listing=reported_apartment_listing,
+            attribute=apartment_heating,
+            option_value="gas",
+        )
+        upsert_listing_attribute_value(
+            session,
+            listing=draft_house_listing,
+            attribute=house_bathrooms,
+            numeric_value=Decimal("2"),
+        )
+        upsert_listing_attribute_value(
+            session,
+            listing=suspended_listing,
+            attribute=apartment_bathrooms,
+            numeric_value=Decimal("1"),
+        )
+        upsert_listing_attribute_value(
+            session,
+            listing=suspended_listing,
+            attribute=apartment_heating,
+            option_value="central",
         )
 
-        ensure_favorite(session, user=buyer, listing=iphone_listing)
+        ensure_favorite(session, user=renter, listing=rent_apartment_listing)
 
         conversation = get_or_create_conversation(
             session,
-            listing=iphone_listing,
-            buyer=buyer,
-            seller=seller,
+            listing=rent_apartment_listing,
+            buyer=renter,
+            seller=rent_seller,
         )
         first_message = get_or_create_message(
             session,
             conversation=conversation,
-            sender=buyer,
-            body="Hi, is the iPhone still available?",
+            sender=renter,
+            body="Hello, is the apartment available for move-in next month?",
         )
         get_or_create_message(
             session,
             conversation=conversation,
-            sender=seller,
-            body="Yes, it is available. I can meet tomorrow after 6 PM.",
+            sender=rent_seller,
+            body="Yes, it is available. I can arrange a viewing this weekend.",
         )
         ensure_message_attachment(
             session,
             message=first_message,
-            file_name="device-reference.jpg",
-            storage_key="demo/messages/device-reference.jpg",
+            file_name="income-proof.jpg",
+            storage_key="demo/messages/income-proof.jpg",
         )
 
         ensure_notification(
             session,
-            user=seller,
-            title="New buyer message",
-            body="Buyer Demo sent a message about iPhone 14 Pro 256GB.",
-            notification_type="message.received",
+            user=rent_seller,
+            title="New property inquiry",
+            body="Renter Demo sent a message about 2-room apartment near Ala-Too Square.",
+            notification_type="message.new",
             status=NotificationStatus.UNREAD,
         )
         ensure_notification(
             session,
-            user=buyer,
-            title="Listing still available",
-            body="Seller Demo replied to your inquiry.",
+            user=renter,
+            title="Viewing reply received",
+            body="Rent Host Demo replied to your apartment inquiry.",
             notification_type="message.reply",
             status=NotificationStatus.READ,
         )
 
         ensure_report(
             session,
-            reporter=buyer,
-            listing=thinkpad_listing,
-            reason_code="price_suspicious",
-            description="Please verify whether the listing price is intentionally low.",
+            reporter=renter,
+            listing=reported_apartment_listing,
+            reason_code="suspicious_pricing",
+            description="The sale price looks far below market and the description feels incomplete.",
         )
 
         featured_package = get_or_create_promotion_package(
             session,
-            code="featured_7_days",
-            name="Featured for 7 days",
-            description="Boost listing visibility in category feeds for one week.",
+            code="featured_apartment_7_days",
+            name="Featured apartment for 7 days",
+            description="Boost apartment visibility in city and category feeds for one week.",
             duration_days=7,
-            price_amount=Decimal("19.99"),
+            price_amount=Decimal("24.99"),
             boost_level=10,
         )
         get_or_create_promotion_package(
             session,
-            code="urgent_3_days",
-            name="Urgent badge for 3 days",
-            description="Highlights the listing with an urgent badge.",
+            code="top_city_3_days",
+            name="Top city placement for 3 days",
+            description="Highlights the property at the top of city results.",
             duration_days=3,
-            price_amount=Decimal("9.99"),
+            price_amount=Decimal("12.99"),
             boost_level=5,
         )
 
         paid_promotion = get_or_create_payment_record(
             session,
-            payer=seller,
-            listing=iphone_listing,
-            provider_reference="seed-promo-iphone-14-pro",
-            amount=Decimal("19.99"),
+            payer=rent_seller,
+            listing=rent_apartment_listing,
+            provider_reference="seed-promo-rent-apartment",
+            amount=Decimal("24.99"),
             status=PaymentStatus.SUCCESSFUL,
         )
         ensure_promotion(
             session,
-            listing=iphone_listing,
+            listing=rent_apartment_listing,
             package=featured_package,
             payment=paid_promotion,
             activated_by=admin,
         )
+        session.flush()
+        active_promotion = session.execute(
+            select(Promotion).where(Promotion.payment_record_id == paid_promotion.id)
+        ).scalar_one()
+        active_promotion.target_city = "Bishkek"
+        active_promotion.target_category_id = apartments.id
 
         ensure_admin_audit_log(
             session,
             actor=admin,
-            action="listing.approved",
+            action="listing.moderation.publish",
             entity_type="listing",
-            entity_id=iphone_listing.public_id,
-            description="Seeded approval log for the promoted iPhone listing.",
+            entity_id=rent_apartment_listing.public_id,
+            description="Seeded publish log for the promoted rental apartment listing.",
         )
         ensure_admin_audit_log(
             session,
             actor=admin,
-            action="listing.submitted_for_review",
-            entity_type="listing",
-            entity_id=samsung_listing.public_id,
-            description="Seeded moderation queue entry for the Samsung listing.",
+            action="user.suspend",
+            entity_type="user",
+            entity_id=suspended_seller.public_id,
+            description="Seeded suspension audit entry for a seller with moderation history.",
+        )
+        session.add(
+            UserStatusHistory(
+                user_id=suspended_seller.id,
+                previous_status=UserStatus.ACTIVE,
+                new_status=UserStatus.SUSPENDED,
+                changed_by_user_id=admin.id,
+                reason="Suspended after repeated misleading property reports and failed identity follow-up.",
+            )
         )
 
 
@@ -1017,8 +1235,10 @@ def main() -> None:
     seed_demo_data()
     print("Seed completed.")
     print(f"Admin: {ADMIN_EMAIL} / {ADMIN_PASSWORD}")
-    print(f"Buyer: {BUYER_EMAIL} / {BUYER_PASSWORD}")
-    print(f"Seller: {SELLER_EMAIL} / {SELLER_PASSWORD}")
+    print(f"Renter: {RENTER_EMAIL} / {RENTER_PASSWORD}")
+    print(f"Rent seller: {RENT_SELLER_EMAIL} / {RENT_SELLER_PASSWORD}")
+    print(f"Sale seller: {SALE_SELLER_EMAIL} / {SALE_SELLER_PASSWORD}")
+    print(f"Suspended seller: {SUSPENDED_SELLER_EMAIL} / {SUSPENDED_SELLER_PASSWORD}")
 
 
 if __name__ == "__main__":
