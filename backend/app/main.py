@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import api_router
 from app.core.config import Settings, get_settings
+from app.core.exceptions import AppError, app_error_handler, validation_exception_handler
 from app.core.logging import configure_logging
 
 
@@ -21,6 +23,8 @@ def create_app() -> FastAPI:
     )
 
     app.state.settings = settings
+    app.add_exception_handler(AppError, app_error_handler)
+    app.add_exception_handler(RequestValidationError, validation_exception_handler)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.app_cors_origins,
@@ -44,3 +48,4 @@ def create_app() -> FastAPI:
 def get_app_settings(app: FastAPI) -> Settings:
     return app.state.settings
 
+app = create_app()

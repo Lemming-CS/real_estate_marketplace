@@ -19,7 +19,9 @@ class Settings(BaseSettings):
     app_port: int = 8000
     app_log_level: str = "INFO"
     app_cors_origins: list[str] = []
+    media_storage_path: str = "uploads"
 
+    database_url: str | None = None
     mysql_host: str = "127.0.0.1"
     mysql_port: int = 3306
     mysql_database: str = "marketplace_db"
@@ -28,6 +30,11 @@ class Settings(BaseSettings):
 
     smtp_host: str = "127.0.0.1"
     smtp_port: int = 1025
+
+    jwt_secret_key: str = "change-me-in-real-env"
+    jwt_access_token_expire_minutes: int = 15
+    jwt_refresh_token_expire_days: int = 30
+    password_reset_token_expire_minutes: int = 30
 
     @field_validator("app_cors_origins", mode="before")
     @classmethod
@@ -38,7 +45,9 @@ class Settings(BaseSettings):
 
     @computed_field
     @property
-    def database_url(self) -> str:
+    def sqlalchemy_database_url(self) -> str:
+        if self.database_url:
+            return self.database_url
         return (
             f"mysql+pymysql://{self.mysql_user}:{self.mysql_password}"
             f"@{self.mysql_host}:{self.mysql_port}/{self.mysql_database}"
@@ -46,10 +55,9 @@ class Settings(BaseSettings):
 
     @property
     def is_debug(self) -> bool:
-        return self.app_env.lower() in {"local", "development", "dev"}
+        return self.app_env.lower() in {"local", "development", "dev", "test"}
 
 
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-

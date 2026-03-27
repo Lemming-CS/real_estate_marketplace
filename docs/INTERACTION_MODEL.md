@@ -23,6 +23,14 @@ React Admin Panel -----/                  -> Mailhog (local email sink)
 4. Backend returns JSON responses to the requesting client.
 5. Future notification or email adapters are triggered from backend-side events, not client-side assumptions.
 
+## Listing Moderation Interaction
+1. Mobile creates or edits a listing in draft/private space.
+2. Mobile uploads listing media and submits the listing for review.
+3. Backend validates category attributes, media presence, ownership, and status transitions.
+4. Admin fetches the moderation queue from admin-prefixed endpoints.
+5. Admin approves or rejects the listing with a moderation note.
+6. Approved listings become visible in public listing endpoints; rejected listings stay private to the owner and admin.
+
 ## Local Development Notes
 - Backend runs on `http://localhost:8000`
 - Admin runs on `http://localhost:5173`

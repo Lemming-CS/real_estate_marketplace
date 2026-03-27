@@ -74,6 +74,14 @@ Backend health check:
 curl http://localhost:8000/api/v1/health
 ```
 
+Then apply the schema and seed demo data:
+
+```bash
+cd backend
+alembic upgrade head
+python -m app.db.seed
+```
+
 ### 4. Start admin locally
 ```bash
 cd admin
@@ -113,6 +121,8 @@ The repository includes a root [Makefile](/home/lemming/Projects/marketplace-ass
 make help
 make env-init
 make compose-up
+make backend-migrate
+make backend-seed
 make backend-run
 make admin-run
 make mobile-run

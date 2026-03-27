@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: help env-init compose-up compose-down compose-logs backend-install backend-run backend-test admin-install admin-run admin-lint admin-build mobile-bootstrap mobile-get mobile-run mobile-analyze
+.PHONY: help env-init compose-up compose-down compose-logs backend-install backend-migrate backend-seed backend-run backend-test admin-install admin-run admin-lint admin-build mobile-bootstrap mobile-get mobile-run mobile-analyze
 
 help:
 	@echo "Available targets:"
@@ -9,6 +9,8 @@ help:
 	@echo "  compose-down      Stop Docker Compose services"
 	@echo "  compose-logs      Tail Docker Compose logs"
 	@echo "  backend-install   Install backend dependencies into the active Python environment"
+	@echo "  backend-migrate   Apply Alembic migrations"
+	@echo "  backend-seed      Seed demo marketplace data"
 	@echo "  backend-run       Start the FastAPI dev server locally"
 	@echo "  backend-test      Run backend tests"
 	@echo "  admin-install     Install admin dependencies"
@@ -37,6 +39,12 @@ compose-logs:
 
 backend-install:
 	cd backend && python3 -m pip install -e '.[dev]'
+
+backend-migrate:
+	cd backend && alembic upgrade head
+
+backend-seed:
+	cd backend && python -m app.db.seed
 
 backend-run:
 	cd backend && uvicorn app.main:create_app --factory --reload --host 0.0.0.0 --port 8000
@@ -67,4 +75,3 @@ mobile-run:
 
 mobile-analyze:
 	cd mobile && flutter analyze
-

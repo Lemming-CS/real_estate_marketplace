@@ -15,34 +15,39 @@
 - `POST /api/v1/auth/logout`
 
 ### User and profile
-- `GET /api/v1/me`
-- `PATCH /api/v1/me`
-- `GET /api/v1/me/addresses`
-- `POST /api/v1/me/addresses`
-- `PATCH /api/v1/me/addresses/{addressId}`
-- `DELETE /api/v1/me/addresses/{addressId}`
-- `POST /api/v1/me/seller-profile`
-- `GET /api/v1/me/seller-profile`
+- `GET /api/v1/auth/me`
+- `GET /api/v1/profile/me`
+- `PATCH /api/v1/profile/me`
+- `POST /api/v1/profile/me/image`
+- `GET /api/v1/users/me/listings`
+- `GET /api/v1/public/users/{userPublicId}`
 
 ### Catalog
 - `GET /api/v1/categories`
-- `GET /api/v1/categories/{categorySlug}`
-- `GET /api/v1/brands`
-- `GET /api/v1/categories/{categorySlug}/attributes`
+- `GET /api/v1/admin/categories`
+- `POST /api/v1/admin/categories`
+- `GET /api/v1/admin/categories/{categoryPublicId}`
+- `PATCH /api/v1/admin/categories/{categoryPublicId}`
+- `DELETE /api/v1/admin/categories/{categoryPublicId}`
 
 ### Listings
 - `GET /api/v1/listings`
-- `GET /api/v1/listings/{listingId}`
+- `GET /api/v1/listings/me`
 - `POST /api/v1/listings`
-- `PATCH /api/v1/listings/{listingId}`
-- `POST /api/v1/listings/{listingId}/submit`
-- `POST /api/v1/listings/{listingId}/archive`
-- `POST /api/v1/listings/{listingId}/mark-sold`
-- `GET /api/v1/me/listings`
+- `PATCH /api/v1/listings/{listingPublicId}`
+- `GET /api/v1/listings/{listingPublicId}`
+- `POST /api/v1/listings/{listingPublicId}/submit-review`
+- `POST /api/v1/listings/{listingPublicId}/archive`
+- `POST /api/v1/listings/{listingPublicId}/deactivate`
+- `POST /api/v1/listings/{listingPublicId}/reactivate`
+- `POST /api/v1/listings/{listingPublicId}/mark-sold`
 
 ### Media uploads
-- `POST /api/v1/uploads/images`
-- `DELETE /api/v1/uploads/images/{assetId}`
+- `POST /api/v1/listings/{listingPublicId}/media`
+- `PUT /api/v1/listings/{listingPublicId}/media/{mediaPublicId}`
+- `PATCH /api/v1/listings/{listingPublicId}/media/order`
+- `POST /api/v1/listings/{listingPublicId}/media/{mediaPublicId}/primary`
+- `DELETE /api/v1/listings/{listingPublicId}/media/{mediaPublicId}`
 
 ### Favorites
 - `GET /api/v1/me/favorites`
@@ -70,24 +75,12 @@
 - `POST /api/v1/notifications/{notificationId}/read`
 
 ### Admin
-- `POST /api/v1/admin/auth/login`
-- `POST /api/v1/admin/auth/refresh`
-- `POST /api/v1/admin/auth/logout`
-- `GET /api/v1/admin/dashboard/summary`
-- `GET /api/v1/admin/users`
-- `GET /api/v1/admin/users/{userId}`
-- `POST /api/v1/admin/users/{userId}/block`
-- `POST /api/v1/admin/users/{userId}/unblock`
-- `GET /api/v1/admin/listings`
-- `GET /api/v1/admin/listings/{listingId}`
-- `POST /api/v1/admin/listings/{listingId}/approve`
-- `POST /api/v1/admin/listings/{listingId}/reject`
-- `GET /api/v1/admin/orders`
-- `GET /api/v1/admin/orders/{orderId}`
-- `POST /api/v1/admin/orders/{orderId}/override-status`
-- `GET /api/v1/admin/promotions`
-- `POST /api/v1/admin/promotions/{promotionId}/cancel`
-- `GET /api/v1/admin/audit-logs`
+- `GET /api/v1/admin/categories`
+- `POST /api/v1/admin/categories`
+- `PATCH /api/v1/admin/categories/{categoryPublicId}`
+- `DELETE /api/v1/admin/categories/{categoryPublicId}`
+- `GET /api/v1/admin/listings/moderation`
+- `POST /api/v1/admin/listings/{listingPublicId}/review`
 
 ## High-Level Request / Response Shapes
 ### Auth token response
@@ -98,10 +91,10 @@
   "refresh_token": "opaque-token-or-cookie-backed-session",
   "refresh_token_expires_in": 2592000,
   "user": {
-    "id": "usr_123",
+    "public_id": "usr_123",
     "email": "seller.demo@example.com",
     "full_name": "Demo Seller",
-    "roles": ["buyer", "seller"],
+    "roles": ["user", "seller"],
     "status": "active",
     "locale": "en"
   }
@@ -125,17 +118,17 @@
 ### Category and attribute metadata
 ```json
 {
-  "id": "cat_laptops",
+  "public_id": "cat_laptops",
   "name": "Laptops",
   "slug": "laptops",
-  "parent_id": "cat_computers",
+  "parent_public_id": "cat_computers",
   "attributes": [
     {
       "code": "ram_gb",
-      "label": "RAM",
-      "type": "number",
-      "required": true,
-      "filterable": true,
+      "display_name": "RAM",
+      "data_type": "number",
+      "is_required": true,
+      "is_filterable": true,
       "unit": "GB"
     }
   ]
@@ -145,26 +138,29 @@
 ### Listing summary
 ```json
 {
-  "id": "lst_123",
+  "public_id": "lst_123",
   "title": "MacBook Air M2 16GB 512GB",
-  "price": {
-    "amount": "950.00",
-    "currency": "USD"
-  },
+  "price_amount": "950.00",
+  "currency_code": "USD",
+  "status": "published",
   "category": {
-    "id": "cat_laptops",
+    "public_id": "cat_laptops",
     "name": "Laptops",
     "slug": "laptops"
   },
-  "brand": {
-    "id": "brand_apple",
-    "name": "Apple"
+  "seller": {
+    "public_id": "usr_seller",
+    "username": "demo_seller",
+    "full_name": "Demo Seller"
   },
-  "condition": "used_like_new",
+  "item_condition": "like_new",
   "city": "Bishkek",
-  "primary_image_url": "https://...",
-  "is_favorited": false,
-  "is_promoted": true,
+  "primary_media": {
+    "public_id": "med_1",
+    "asset_key": "listings/lst_123/0e4...jpg",
+    "mime_type": "image/jpeg",
+    "is_primary": true
+  },
   "published_at": "2026-03-26T10:00:00Z"
 }
 ```
@@ -172,49 +168,39 @@
 ### Listing detail
 ```json
 {
-  "id": "lst_123",
+  "public_id": "lst_123",
   "title": "MacBook Air M2 16GB 512GB",
   "description": "Well-kept laptop with charger and box.",
-  "price": {
-    "amount": "950.00",
-    "currency": "USD"
-  },
+  "price_amount": "950.00",
+  "currency_code": "USD",
   "status": "published",
-  "condition": "used_like_new",
+  "item_condition": "like_new",
   "category": {
-    "id": "cat_laptops",
+    "public_id": "cat_laptops",
     "name": "Laptops",
     "slug": "laptops"
   },
-  "brand": {
-    "id": "brand_apple",
-    "name": "Apple"
-  },
-  "attributes": [
+  "attribute_values": [
     {
-      "code": "ram_gb",
-      "label": "RAM",
-      "type": "number",
-      "value": 16,
+      "attribute_code": "ram_gb",
+      "display_name": "RAM",
+      "data_type": "number",
+      "numeric_value": 16,
       "unit": "GB"
     }
   ],
-  "images": [
+  "media_items": [
     {
-      "id": "img_1",
-      "url": "https://...",
-      "sort_order": 1,
+      "public_id": "img_1",
+      "asset_key": "listings/lst_123/0e4...jpg",
+      "sort_order": 0,
       "is_primary": true
     }
   ],
   "seller": {
-    "id": "usr_seller",
-    "display_name": "Demo Seller",
-    "verified": true
-  },
-  "promotion": {
-    "status": "active",
-    "plan_code": "top_7_days"
+    "public_id": "usr_seller",
+    "username": "demo_seller",
+    "full_name": "Demo Seller"
   }
 }
 ```
