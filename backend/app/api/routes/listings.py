@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Literal
-
-from fastapi import APIRouter, Depends, File, Query, UploadFile, status
+from fastapi.encoders import jsonable_encoder
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_optional_current_user, require_account_status
-from app.db.enums import UserStatus
+from app.core.config import Settings, get_settings
+from app.db.enums import ListingStatus, UserStatus
 from app.db.models import User
 from app.modules.auth.schemas import MessageResponse
 from app.modules.listings.schemas import (
@@ -14,8 +17,10 @@ from app.modules.listings.schemas import (
     ListingDetailSchema,
     ListingMediaOrderRequest,
     ListingMediaSchema,
+    ListingQueryParams,
+    ListingSortOption,
     ListingStatusSchema,
-    ListingSummarySchema,
+    PaginatedListingsResponseSchema,
     ListingUpdateRequest,
 )
 from app.modules.listings.service import (
@@ -24,7 +29,7 @@ from app.modules.listings.service import (
     deactivate_listing,
     delete_listing_media,
     get_listing_detail,
-    list_owner_listings,
+    list_owner_discovery_listings,
     list_public_listings,
     mark_listing_sold,
     reactivate_listing,
@@ -35,7 +40,6 @@ from app.modules.listings.service import (
     update_listing,
     upload_listing_media,
 )
-from app.core.config import Settings, get_settings
 
 router = APIRouter(prefix="/listings", tags=["listings"])
 
@@ -44,35 +48,108 @@ def _resolved_locale(current_user: User | None, locale: str | None) -> str:
     return locale or (current_user.locale if current_user else "en")
 
 
+def _validated_listing_filters(**data) -> ListingQueryParams:
+    try:
+        return ListingQueryParams(**data)
+    except ValidationError as exc:
+        safe_errors = []
+
+        for err in exc.errors():
+            safe_errors.append(
+                {
+                    "loc": [str(x) for x in err.get("loc", [])],
+                    "msg": str(err.get("msg", "Invalid request")),
+                    "type": str(err.get("type", "value_error")),
+                }
+            )
+
+        raise HTTPException(status_code=422, detail=safe_errors) from exc
+
+def _public_listing_filters(
+    q: str | None = Query(default=None),
+    category_public_id: str | None = Query(default=None),
+    city: str | None = Query(default=None),
+    min_price: Decimal | None = Query(default=None),
+    max_price: Decimal | None = Query(default=None),
+    sort: ListingSortOption = Query(default="newest"),
+    promoted_first: bool = Query(default=True),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=50),
+) -> ListingQueryParams:
+    return _validated_listing_filters(
+        query=q,
+        category_public_id=category_public_id,
+        city=city,
+        min_price=min_price,
+        max_price=max_price,
+        sort=sort,
+        promoted_first=promoted_first,
+        page=page,
+        page_size=page_size,
+    )
+
+
+def _owner_listing_filters(
+    q: str | None = Query(default=None),
+    category_public_id: str | None = Query(default=None),
+    city: str | None = Query(default=None),
+    min_price: Decimal | None = Query(default=None),
+    max_price: Decimal | None = Query(default=None),
+    status: ListingStatus | None = Query(default=None),
+    sort: ListingSortOption = Query(default="newest"),
+    promoted_first: bool = Query(default=False),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=50),
+) -> ListingQueryParams:
+    return _validated_listing_filters(
+        query=q,
+        category_public_id=category_public_id,
+        city=city,
+        min_price=min_price,
+        max_price=max_price,
+        status=status,
+        sort=sort,
+        promoted_first=promoted_first,
+        page=page,
+        page_size=page_size,
+    )
+
+
 @router.get(
     "",
-    response_model=list[ListingSummarySchema],
-    summary="List publicly visible approved marketplace listings",
+    response_model=PaginatedListingsResponseSchema,
+    summary="List the marketplace home feed with search, filters, sorting, and pagination",
 )
 def public_listings(
-    category_public_id: str | None = Query(default=None),
+    filters: ListingQueryParams = Depends(_public_listing_filters),
     locale: Literal["en", "ru"] | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User | None = Depends(get_optional_current_user),
-) -> list[ListingSummarySchema]:
+) -> PaginatedListingsResponseSchema:
     return list_public_listings(
         db,
         locale=_resolved_locale(current_user, locale),
-        category_public_id=category_public_id,
+        filters=filters,
     )
 
 
 @router.get(
     "/me",
-    response_model=list[ListingSummarySchema],
-    summary="List all listings owned by the authenticated user, including hidden statuses",
+    response_model=PaginatedListingsResponseSchema,
+    summary="List all listings owned by the authenticated user with private-status filters",
 )
 def own_listings(
+    filters: ListingQueryParams = Depends(_owner_listing_filters),
     locale: Literal["en", "ru"] | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_account_status(UserStatus.ACTIVE)),
-) -> list[ListingSummarySchema]:
-    return list_owner_listings(db, owner=current_user, locale=_resolved_locale(current_user, locale))
+) -> PaginatedListingsResponseSchema:
+    return list_owner_discovery_listings(
+        db,
+        owner=current_user,
+        locale=_resolved_locale(current_user, locale),
+        filters=filters,
+    )
 
 
 @router.post(

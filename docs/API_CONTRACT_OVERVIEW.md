@@ -50,9 +50,22 @@
 - `DELETE /api/v1/listings/{listingPublicId}/media/{mediaPublicId}`
 
 ### Favorites
-- `GET /api/v1/me/favorites`
-- `POST /api/v1/listings/{listingId}/favorite`
-- `DELETE /api/v1/listings/{listingId}/favorite`
+- `GET /api/v1/favorites`
+- `POST /api/v1/favorites/{listingPublicId}`
+- `DELETE /api/v1/favorites/{listingPublicId}`
+
+### Conversations and messaging
+- `POST /api/v1/conversations/from-listing/{listingPublicId}`
+- `GET /api/v1/conversations`
+- `GET /api/v1/conversations/{conversationPublicId}`
+- `POST /api/v1/conversations/{conversationPublicId}/messages`
+- `POST /api/v1/conversations/{conversationPublicId}/read`
+- `GET /api/v1/conversations/{conversationPublicId}/attachments/{attachmentPublicId}`
+
+### Notifications
+- `GET /api/v1/notifications`
+- `POST /api/v1/notifications/{notificationId}/read`
+- `GET /api/v1/notifications/unread-count`
 
 ### Orders
 - `POST /api/v1/orders`
@@ -81,6 +94,18 @@
 - `DELETE /api/v1/admin/categories/{categoryPublicId}`
 - `GET /api/v1/admin/listings/moderation`
 - `POST /api/v1/admin/listings/{listingPublicId}/review`
+
+## Discovery Query Params
+- `q`: keyword search across title and description
+- `category_public_id`: exact category filter
+- `city`: partial city/location match
+- `min_price`: lower price bound
+- `max_price`: upper price bound
+- `status`: allowed on owner/admin listing contexts
+- `sort`: `newest`, `oldest`, `price_asc`, `price_desc`
+- `promoted_first`: optional boolean ordering hint
+- `page`: 1-based page number
+- `page_size`: page size, capped at 50
 
 ## High-Level Request / Response Shapes
 ### Auth token response
@@ -138,30 +163,42 @@
 ### Listing summary
 ```json
 {
-  "public_id": "lst_123",
-  "title": "MacBook Air M2 16GB 512GB",
-  "price_amount": "950.00",
-  "currency_code": "USD",
-  "status": "published",
-  "category": {
-    "public_id": "cat_laptops",
-    "name": "Laptops",
-    "slug": "laptops"
-  },
-  "seller": {
-    "public_id": "usr_seller",
-    "username": "demo_seller",
-    "full_name": "Demo Seller"
-  },
-  "item_condition": "like_new",
-  "city": "Bishkek",
-  "primary_media": {
-    "public_id": "med_1",
-    "asset_key": "listings/lst_123/0e4...jpg",
-    "mime_type": "image/jpeg",
-    "is_primary": true
-  },
-  "published_at": "2026-03-26T10:00:00Z"
+  "items": [
+    {
+      "public_id": "lst_123",
+      "title": "MacBook Air M2 16GB 512GB",
+      "price_amount": "950.00",
+      "currency_code": "USD",
+      "status": "published",
+      "item_condition": "like_new",
+      "city": "Bishkek",
+      "is_promoted": true,
+      "category": {
+        "public_id": "cat_laptops",
+        "name": "Laptops",
+        "slug": "laptops"
+      },
+      "seller": {
+        "public_id": "usr_seller",
+        "username": "demo_seller",
+        "full_name": "Demo Seller",
+        "profile_image_path": "profile-images/usr_seller/avatar.jpg"
+      },
+      "primary_media": {
+        "public_id": "med_1",
+        "asset_key": "listings/lst_123/0e4...jpg",
+        "mime_type": "image/jpeg",
+        "is_primary": true
+      },
+      "published_at": "2026-03-26T10:00:00Z"
+    }
+  ],
+  "meta": {
+    "page": 1,
+    "page_size": 20,
+    "total_items": 132,
+    "total_pages": 7
+  }
 }
 ```
 
@@ -201,7 +238,106 @@
     "public_id": "usr_seller",
     "username": "demo_seller",
     "full_name": "Demo Seller"
+  },
+  "owner": {
+    "public_id": "usr_seller",
+    "username": "demo_seller",
+    "full_name": "Demo Seller",
+    "bio": "Laptop specialist",
+    "profile_image_path": "profile-images/usr_seller/avatar.jpg",
+    "active_listing_count": 12,
+    "created_at": "2026-01-01T10:00:00Z"
   }
+}
+```
+
+### Favorites list item
+```json
+{
+  "items": [
+    {
+      "created_at": "2026-03-27T10:00:00Z",
+      "listing_public_id": "lst_123",
+      "is_available": false,
+      "unavailable_reason": "listing_archived",
+      "listing": {
+        "public_id": "lst_123",
+        "title": "MacBook Air M2 16GB 512GB",
+        "price_amount": "950.00",
+        "currency_code": "USD",
+        "status": "archived",
+        "item_condition": "like_new",
+        "city": "Bishkek",
+        "is_promoted": false,
+        "category": {
+          "public_id": "cat_laptops",
+          "name": "Laptops",
+          "slug": "laptops"
+        },
+        "seller": {
+          "public_id": "usr_seller",
+          "username": "demo_seller",
+          "full_name": "Demo Seller",
+          "profile_image_path": null
+        },
+        "primary_media": null,
+        "published_at": null,
+        "created_at": "2026-03-20T10:00:00Z",
+        "updated_at": "2026-03-27T10:00:00Z"
+      }
+    }
+  ],
+  "meta": {
+    "page": 1,
+    "page_size": 20,
+    "total_items": 1,
+    "total_pages": 1
+  }
+}
+```
+
+### Conversation detail
+```json
+{
+  "public_id": "cnv_123",
+  "status": "active",
+  "listing": {
+    "public_id": "lst_123",
+    "title": "MacBook Air M2 16GB 512GB",
+    "status": "published",
+    "primary_media_asset_key": "listings/lst_123/cover.jpg"
+  },
+  "buyer_user_id": "usr_buyer",
+  "seller_user_id": "usr_seller",
+  "counterparty": {
+    "public_id": "usr_seller",
+    "username": "demo_seller",
+    "full_name": "Demo Seller",
+    "profile_image_path": null
+  },
+  "unread_count": 1,
+  "last_message_at": "2026-03-27T10:00:00Z",
+  "messages": [
+    {
+      "public_id": "msg_123",
+      "sender_user_id": "usr_buyer",
+      "body": "Is this still available?",
+      "message_type": "text",
+      "status": "sent",
+      "read_at": null,
+      "created_at": "2026-03-27T10:00:00Z",
+      "attachments": [
+        {
+          "public_id": "att_123",
+          "attachment_type": "file",
+          "file_name": "invoice.pdf",
+          "mime_type": "application/pdf",
+          "file_size_bytes": 10240,
+          "download_url": "/api/v1/conversations/cnv_123/attachments/att_123"
+        }
+      ]
+    }
+  ]
 }
 ```
 

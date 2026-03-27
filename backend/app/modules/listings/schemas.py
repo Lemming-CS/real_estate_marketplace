@@ -7,8 +7,10 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, model_validator
 
 from app.db.enums import CategoryAttributeType, ListingCondition, ListingStatus, MediaType
+from app.shared.schemas import PaginationMetaSchema
 
 LocaleCode = Literal["en", "ru"]
+ListingSortOption = Literal["newest", "oldest", "price_asc", "price_desc"]
 
 
 class ListingAttributeValueInput(BaseModel):
@@ -71,6 +73,25 @@ class ModerationReviewRequest(BaseModel):
         return self
 
 
+class ListingQueryParams(BaseModel):
+    query: str | None = Field(default=None, max_length=120)
+    category_public_id: str | None = None
+    city: str | None = Field(default=None, max_length=120)
+    min_price: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
+    max_price: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
+    status: ListingStatus | None = None
+    sort: ListingSortOption = "newest"
+    promoted_first: bool = False
+    page: int = Field(default=1, ge=1)
+    page_size: int = Field(default=20, ge=1, le=50)
+
+    @model_validator(mode="after")
+    def validate_price_range(self) -> "ListingQueryParams":
+        if self.min_price is not None and self.max_price is not None and self.min_price > self.max_price:
+            raise ValueError("min_price cannot be greater than max_price.")
+        return self
+
+
 class ListingCategorySummarySchema(BaseModel):
     public_id: str
     slug: str
@@ -81,6 +102,17 @@ class ListingSellerSummarySchema(BaseModel):
     public_id: str
     username: str
     full_name: str
+    profile_image_path: str | None = None
+
+
+class ListingOwnerCardSchema(BaseModel):
+    public_id: str
+    username: str
+    full_name: str
+    bio: str | None = None
+    profile_image_path: str | None = None
+    created_at: datetime
+    active_listing_count: int
 
 
 class ListingMediaSchema(BaseModel):
@@ -116,6 +148,7 @@ class ListingSummarySchema(BaseModel):
     category: ListingCategorySummarySchema
     seller: ListingSellerSummarySchema
     primary_media: ListingMediaSchema | None = None
+    is_promoted: bool = False
     published_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
@@ -124,6 +157,7 @@ class ListingSummarySchema(BaseModel):
 class ListingDetailSchema(ListingSummarySchema):
     description: str
     moderation_note: str | None = None
+    owner: ListingOwnerCardSchema
     media_items: list[ListingMediaSchema]
     attribute_values: list[ListingAttributeValueSchema]
 
@@ -133,3 +167,26 @@ class ListingStatusSchema(BaseModel):
     status: ListingStatus
     moderation_note: str | None = None
     published_at: datetime | None = None
+
+
+class PaginatedListingsResponseSchema(BaseModel):
+    items: list[ListingSummarySchema]
+    meta: PaginationMetaSchema
+
+
+class FavoriteItemSchema(BaseModel):
+    created_at: datetime
+    listing_public_id: str | None = None
+    listing: ListingSummarySchema | None = None
+    is_available: bool
+    unavailable_reason: str | None = None
+
+
+class PaginatedFavoritesResponseSchema(BaseModel):
+    items: list[FavoriteItemSchema]
+    meta: PaginationMetaSchema
+
+
+class FavoriteStatusSchema(BaseModel):
+    listing_public_id: str
+    is_favorited: bool

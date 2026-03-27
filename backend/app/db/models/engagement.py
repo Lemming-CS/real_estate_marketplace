@@ -15,6 +15,7 @@ class Favorite(TimestampMixin, Base):
     __table_args__ = (
         UniqueConstraint("user_id", "listing_id", name="uq_favorites_user_listing"),
         Index("ix_favorites_listing_id", "listing_id"),
+        Index("ix_favorites_user_id_created_at", "user_id", "created_at"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -74,4 +75,3 @@ class Report(TimestampMixin, Base):
     )
     resolution_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-

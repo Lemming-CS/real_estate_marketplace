@@ -100,6 +100,7 @@ def get_public_user_profile(session: Session, *, public_id: str) -> PublicUserPr
         bio=user.bio,
         profile_image_path=user.profile_image_path,
         status=user.status,
+        active_listing_count=published_listing_count,
         published_listing_count=published_listing_count,
         created_at=user.created_at,
     )

@@ -28,6 +28,9 @@ class Listing(PublicIdMixin, SoftDeleteMixin, TimestampMixin, Base):
         Index("ix_listings_seller_id_status_created_at", "seller_id", "status", "created_at"),
         Index("ix_listings_category_id_status_price", "category_id", "status", "price_amount"),
         Index("ix_listings_status_published_at", "status", "published_at"),
+        Index("ix_listings_status_city_published_at", "status", "city", "published_at"),
+        Index("ix_listings_status_price_amount", "status", "price_amount"),
+        Index("ix_listings_title", "title"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -56,6 +59,7 @@ class Listing(PublicIdMixin, SoftDeleteMixin, TimestampMixin, Base):
         back_populates="listing",
         cascade="all, delete-orphan",
     )
+    conversations: Mapped[list["Conversation"]] = relationship(back_populates="listing")
     attribute_values: Mapped[list["ListingAttributeValue"]] = relationship(
         back_populates="listing",
         cascade="all, delete-orphan",

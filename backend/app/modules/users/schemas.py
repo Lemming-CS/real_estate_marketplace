@@ -46,6 +46,7 @@ class PublicUserProfileSchema(BaseModel):
     bio: str | None = None
     profile_image_path: str | None = None
     status: UserStatus
+    active_listing_count: int
     published_listing_count: int
     created_at: datetime
 
@@ -59,4 +60,3 @@ class OwnerListingSchema(BaseModel):
     city: str
     published_at: datetime | None = None
     created_at: datetime
-

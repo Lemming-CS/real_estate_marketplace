@@ -15,3 +15,10 @@ class ErrorDetail(BaseModel):
 
 class ErrorEnvelope(BaseModel):
     error: ErrorDetail
+
+
+class PaginationMetaSchema(BaseModel):
+    page: int
+    page_size: int
+    total_items: int
+    total_pages: int

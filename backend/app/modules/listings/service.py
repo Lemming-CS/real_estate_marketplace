@@ -1,28 +1,33 @@
 from __future__ import annotations
 
-from decimal import Decimal
+from math import ceil
 from pathlib import Path
 
 from fastapi import UploadFile
-from sqlalchemy import Select, select
+from sqlalchemy import Select, case, exists, func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.auth import utcnow
 from app.core.config import Settings
 from app.core.exceptions import AppError
-from app.db.enums import ListingStatus, MediaType, RoleCode, UserStatus
+from app.db.enums import ListingStatus, MediaType, PromotionStatus, RoleCode, UserStatus
 from app.db.models import (
     Category,
     CategoryAttribute,
     CategoryTranslation,
+    Favorite,
     Listing,
     ListingAttributeValue,
     ListingMedia,
+    Promotion,
     Role,
     User,
     UserRole,
 )
 from app.modules.listings.schemas import (
+    FavoriteItemSchema,
+    FavoriteStatusSchema,
     ListingAttributeValueInput,
     ListingAttributeValueSchema,
     ListingCategorySummarySchema,
@@ -30,13 +35,19 @@ from app.modules.listings.schemas import (
     ListingDetailSchema,
     ListingMediaOrderRequest,
     ListingMediaSchema,
+    ListingOwnerCardSchema,
+    ListingQueryParams,
     ListingSellerSummarySchema,
     ListingStatusSchema,
     ListingSummarySchema,
     ListingUpdateRequest,
     ModerationReviewRequest,
+    PaginatedFavoritesResponseSchema,
+    PaginatedListingsResponseSchema,
 )
+from app.modules.notifications.service import notify_listing_reviewed
 from app.shared.audit import record_admin_audit_log
+from app.shared.schemas import PaginationMetaSchema
 from app.shared.storage import delete_storage_key, save_upload
 
 MAX_LISTING_MEDIA_COUNT = 10
@@ -48,24 +59,58 @@ def list_public_listings(
     session: Session,
     *,
     locale: str,
-    category_public_id: str | None = None,
-) -> list[ListingSummarySchema]:
-    query = _listing_query().where(Listing.deleted_at.is_(None), Listing.status == ListingStatus.PUBLISHED)
-    if category_public_id:
-        category = session.execute(
-            select(Category).where(Category.public_id == category_public_id, Category.deleted_at.is_(None))
-        ).scalar_one_or_none()
-        if category is None:
-            raise AppError(status_code=404, code="category_not_found", message="Category was not found.")
-        query = query.where(Listing.category_id == category.id)
-
-    listings = session.execute(
-        query
+    filters: ListingQueryParams,
+) -> PaginatedListingsResponseSchema:
+    base_query = (
+        select(Listing.id)
         .join(Listing.seller)
-        .where(User.status == UserStatus.ACTIVE, User.deleted_at.is_(None))
-        .order_by(Listing.published_at.desc(), Listing.created_at.desc())
-    ).scalars().all()
-    return [_build_listing_summary_schema(listing, locale=locale) for listing in listings]
+        .where(
+            Listing.deleted_at.is_(None),
+            Listing.status == ListingStatus.PUBLISHED,
+            User.deleted_at.is_(None),
+            User.status == UserStatus.ACTIVE,
+        )
+    )
+    base_query = _apply_common_listing_filters(session, query=base_query, filters=filters)
+    return _paginate_listings(session, base_query=base_query, locale=locale, filters=filters)
+
+
+def list_owner_discovery_listings(
+    session: Session,
+    *,
+    owner: User,
+    locale: str,
+    filters: ListingQueryParams,
+) -> PaginatedListingsResponseSchema:
+    base_query = select(Listing.id).where(
+        Listing.seller_id == owner.id,
+        Listing.deleted_at.is_(None),
+    )
+    base_query = _apply_common_listing_filters(session, query=base_query, filters=filters, include_status=True)
+    return _paginate_listings(session, base_query=base_query, locale=locale, filters=filters)
+
+
+def list_public_user_listings(
+    session: Session,
+    *,
+    owner_public_id: str,
+    locale: str,
+    filters: ListingQueryParams,
+) -> PaginatedListingsResponseSchema:
+    owner = _get_public_owner_or_404(session, user_public_id=owner_public_id)
+    base_query = (
+        select(Listing.id)
+        .join(Listing.seller)
+        .where(
+            Listing.seller_id == owner.id,
+            Listing.deleted_at.is_(None),
+            Listing.status == ListingStatus.PUBLISHED,
+            User.deleted_at.is_(None),
+            User.status == UserStatus.ACTIVE,
+        )
+    )
+    base_query = _apply_common_listing_filters(session, query=base_query, filters=filters)
+    return _paginate_listings(session, base_query=base_query, locale=locale, filters=filters)
 
 
 def get_listing_detail(
@@ -78,16 +123,12 @@ def get_listing_detail(
     listing = _get_listing_or_404(session, listing_public_id=listing_public_id)
     if not _can_view_listing(session=session, listing=listing, actor=actor):
         raise AppError(status_code=404, code="listing_not_found", message="Listing was not found.")
-    return _build_listing_detail_schema(listing, locale=locale)
-
-
-def list_owner_listings(session: Session, *, owner: User, locale: str) -> list[ListingSummarySchema]:
-    listings = session.execute(
-        _listing_query()
-        .where(Listing.seller_id == owner.id, Listing.deleted_at.is_(None))
-        .order_by(Listing.created_at.desc())
-    ).scalars().all()
-    return [_build_listing_summary_schema(listing, locale=locale) for listing in listings]
+    return _build_listing_detail_schema(
+        session,
+        listing=listing,
+        locale=locale,
+        is_promoted=_active_promotion_map(session, [listing.id]).get(listing.id, False),
+    )
 
 
 def create_listing(
@@ -120,8 +161,12 @@ def create_listing(
         attribute_inputs=payload.attribute_values,
     )
     session.flush()
-    session.refresh(listing)
-    return _build_listing_detail_schema(_get_listing_or_404(session, listing_public_id=listing.public_id), locale=locale)
+    return _build_listing_detail_schema(
+        session,
+        listing=_get_listing_or_404(session, listing_public_id=listing.public_id),
+        locale=locale,
+        is_promoted=False,
+    )
 
 
 def update_listing(
@@ -178,8 +223,12 @@ def update_listing(
         _move_listing_to_pending_review(listing)
 
     session.flush()
-    session.refresh(listing)
-    return _build_listing_detail_schema(_get_listing_or_404(session, listing_public_id=listing.public_id), locale=locale)
+    return _build_listing_detail_schema(
+        session,
+        listing=_get_listing_or_404(session, listing_public_id=listing.public_id),
+        locale=locale,
+        is_promoted=_active_promotion_map(session, [listing.id]).get(listing.id, False),
+    )
 
 
 def submit_listing_for_review(
@@ -382,19 +431,14 @@ def reorder_listing_media(
         )
 
     media_by_public_id = {media.public_id: media for media in active_media}
-
-    # First move all current sort orders out of the way so unique(listing_id, sort_order)
-    # is never violated during reordering.
     offset = len(active_media) + 1000
     for media in active_media:
         media.sort_order = media.sort_order + offset
     session.flush()
 
-    # Then assign the final desired order.
     for index, media_public_id in enumerate(payload.media_public_ids):
         media_by_public_id[media_public_id].sort_order = index
 
-    # Keep exactly one primary item: the first item in the requested order.
     primary_public_id = payload.media_public_ids[0] if payload.media_public_ids else None
     for media in active_media:
         media.is_primary = media.public_id == primary_public_id
@@ -404,6 +448,7 @@ def reorder_listing_media(
         _build_listing_media_schema(media_by_public_id[media_public_id])
         for media_public_id in payload.media_public_ids
     ]
+
 
 def set_primary_listing_media(
     session: Session,
@@ -459,13 +504,24 @@ def delete_listing_media(
     session.flush()
 
 
-def list_moderation_queue(session: Session, *, locale: str) -> list[ListingSummarySchema]:
-    listings = session.execute(
-        _listing_query()
-        .where(Listing.deleted_at.is_(None), Listing.status == ListingStatus.PENDING_REVIEW)
-        .order_by(Listing.updated_at.asc(), Listing.created_at.asc())
-    ).scalars().all()
-    return [_build_listing_summary_schema(listing, locale=locale) for listing in listings]
+def list_moderation_queue(
+    session: Session,
+    *,
+    locale: str,
+    filters: ListingQueryParams,
+) -> PaginatedListingsResponseSchema:
+    effective_filters = filters.model_copy()
+    if effective_filters.status is None:
+        effective_filters.status = ListingStatus.PENDING_REVIEW
+
+    base_query = select(Listing.id).where(Listing.deleted_at.is_(None))
+    base_query = _apply_common_listing_filters(
+        session,
+        query=base_query,
+        filters=effective_filters,
+        include_status=True,
+    )
+    return _paginate_listings(session, base_query=base_query, locale=locale, filters=effective_filters)
 
 
 def review_listing(
@@ -498,6 +554,15 @@ def review_listing(
         listing.published_at = None
         listing.moderation_note = payload.moderation_note
 
+    notify_listing_reviewed(
+        session,
+        user=listing.seller,
+        listing_public_id=listing.public_id,
+        listing_title=listing.title,
+        approved=payload.action == "approve",
+        moderation_note=payload.moderation_note,
+    )
+
     session.flush()
     record_admin_audit_log(
         session,
@@ -511,7 +576,112 @@ def review_listing(
         before_json=before_json,
         after_json=_listing_snapshot(listing),
     )
-    return _build_listing_detail_schema(_get_listing_or_404(session, listing_public_id=listing.public_id), locale=locale)
+    return _build_listing_detail_schema(
+        session,
+        listing=_get_listing_or_404(session, listing_public_id=listing.public_id),
+        locale=locale,
+        is_promoted=_active_promotion_map(session, [listing.id]).get(listing.id, False),
+    )
+
+
+def add_favorite(session: Session, *, user: User, listing_public_id: str) -> FavoriteStatusSchema:
+    listing = _get_listing_or_404(session, listing_public_id=listing_public_id)
+    listing_id = listing.id
+    listing_public_id_value = listing.public_id
+    if listing.seller_id == user.id:
+        raise AppError(status_code=400, code="favorite_own_listing", message="You cannot favorite your own listing.")
+    if not _is_publicly_available(listing):
+        raise AppError(
+            status_code=409,
+            code="listing_not_favoritable",
+            message="Only publicly visible listings can be added to favorites.",
+        )
+
+    existing = session.execute(
+        select(Favorite).where(Favorite.user_id == user.id, Favorite.listing_id == listing_id)
+    ).scalar_one_or_none()
+    if existing is None:
+        session.add(Favorite(user_id=user.id, listing_id=listing_id))
+        try:
+            session.flush()
+        except IntegrityError as exc:
+            session.rollback()
+            existing = session.execute(
+                select(Favorite).where(Favorite.user_id == user.id, Favorite.listing_id == listing_id)
+            ).scalar_one_or_none()
+            if existing is None:
+                raise AppError(
+                    status_code=500,
+                    code="favorite_create_failed",
+                    message="Favorite could not be created.",
+                ) from exc
+    return FavoriteStatusSchema(listing_public_id=listing_public_id_value, is_favorited=True)
+
+
+def remove_favorite(session: Session, *, user: User, listing_public_id: str) -> FavoriteStatusSchema:
+    listing = session.execute(
+        select(Listing).where(Listing.public_id == listing_public_id)
+    ).scalar_one_or_none()
+    listing_id = listing.id if listing is not None else None
+    if listing_id is not None:
+        favorite = session.execute(
+            select(Favorite).where(Favorite.user_id == user.id, Favorite.listing_id == listing_id)
+        ).scalar_one_or_none()
+        if favorite is not None:
+            session.delete(favorite)
+            session.flush()
+    return FavoriteStatusSchema(listing_public_id=listing_public_id, is_favorited=False)
+
+
+def list_favorites(
+    session: Session,
+    *,
+    user: User,
+    locale: str,
+    page: int,
+    page_size: int,
+) -> PaginatedFavoritesResponseSchema:
+    base_query = select(Favorite).where(Favorite.user_id == user.id).order_by(Favorite.created_at.desc(), Favorite.id.desc())
+    total_items = session.execute(select(func.count()).select_from(base_query.subquery())).scalar_one()
+    favorites = session.execute(
+        base_query.offset((page - 1) * page_size).limit(page_size)
+    ).scalars().all()
+
+    listing_ids = [favorite.listing_id for favorite in favorites]
+    listings = (
+        session.execute(_listing_query().where(Listing.id.in_(listing_ids))).scalars().all()
+        if listing_ids
+        else []
+    )
+    listings_by_id = {listing.id: listing for listing in listings}
+    promoted_map = _active_promotion_map(session, listing_ids)
+
+    items = []
+    for favorite in favorites:
+        listing = listings_by_id.get(favorite.listing_id)
+        unavailable_reason = _favorite_unavailable_reason(listing)
+        items.append(
+            FavoriteItemSchema(
+                created_at=favorite.created_at,
+                listing_public_id=listing.public_id if listing else None,
+                listing=(
+                    _build_listing_summary_schema(
+                        listing,
+                        locale=locale,
+                        is_promoted=promoted_map.get(listing.id, False),
+                    )
+                    if listing
+                    else None
+                ),
+                is_available=unavailable_reason is None,
+                unavailable_reason=unavailable_reason,
+            )
+        )
+
+    return PaginatedFavoritesResponseSchema(
+        items=items,
+        meta=_pagination_meta(page=page, page_size=page_size, total_items=total_items),
+    )
 
 
 def _listing_query() -> Select[tuple[Listing]]:
@@ -533,6 +703,19 @@ def _get_listing_or_404(session: Session, *, listing_public_id: str) -> Listing:
     if listing is None:
         raise AppError(status_code=404, code="listing_not_found", message="Listing was not found.")
     return listing
+
+
+def _get_public_owner_or_404(session: Session, *, user_public_id: str) -> User:
+    user = session.execute(
+        select(User).where(
+            User.public_id == user_public_id,
+            User.deleted_at.is_(None),
+            User.status == UserStatus.ACTIVE,
+        )
+    ).scalar_one_or_none()
+    if user is None:
+        raise AppError(status_code=404, code="user_not_found", message="User was not found.")
+    return user
 
 
 def _get_active_category_or_404(session: Session, *, category_public_id: str) -> Category:
@@ -737,8 +920,13 @@ def _can_view_listing(*, session: Session, listing: Listing, actor: User | None)
         return True
     if actor is not None and _is_admin(session, user=actor):
         return True
+    return _is_publicly_available(listing)
+
+
+def _is_publicly_available(listing: Listing) -> bool:
     return (
-        listing.status == ListingStatus.PUBLISHED
+        listing.deleted_at is None
+        and listing.status == ListingStatus.PUBLISHED
         and listing.seller.deleted_at is None
         and listing.seller.status == UserStatus.ACTIVE
     )
@@ -770,6 +958,26 @@ def _build_listing_seller_schema(seller: User) -> ListingSellerSummarySchema:
         public_id=seller.public_id,
         username=seller.username,
         full_name=seller.full_name,
+        profile_image_path=seller.profile_image_path,
+    )
+
+
+def _build_owner_card_schema(session: Session, *, seller: User) -> ListingOwnerCardSchema:
+    active_listing_count = session.execute(
+        select(func.count(Listing.id)).where(
+            Listing.seller_id == seller.id,
+            Listing.status == ListingStatus.PUBLISHED,
+            Listing.deleted_at.is_(None),
+        )
+    ).scalar_one()
+    return ListingOwnerCardSchema(
+        public_id=seller.public_id,
+        username=seller.username,
+        full_name=seller.full_name,
+        bio=seller.bio,
+        profile_image_path=seller.profile_image_path,
+        created_at=seller.created_at,
+        active_listing_count=active_listing_count,
     )
 
 
@@ -778,7 +986,12 @@ def _primary_media(listing: Listing) -> ListingMedia | None:
     return media_items[0] if media_items else None
 
 
-def _build_listing_summary_schema(listing: Listing, *, locale: str) -> ListingSummarySchema:
+def _build_listing_summary_schema(
+    listing: Listing,
+    *,
+    locale: str,
+    is_promoted: bool,
+) -> ListingSummarySchema:
     primary_media = _primary_media(listing)
     return ListingSummarySchema(
         public_id=listing.public_id,
@@ -791,18 +1004,26 @@ def _build_listing_summary_schema(listing: Listing, *, locale: str) -> ListingSu
         category=_build_listing_category_schema(listing.category, locale=locale),
         seller=_build_listing_seller_schema(listing.seller),
         primary_media=_build_listing_media_schema(primary_media) if primary_media else None,
+        is_promoted=is_promoted,
         published_at=listing.published_at,
         created_at=listing.created_at,
         updated_at=listing.updated_at,
     )
 
 
-def _build_listing_detail_schema(listing: Listing, *, locale: str) -> ListingDetailSchema:
-    summary = _build_listing_summary_schema(listing, locale=locale)
+def _build_listing_detail_schema(
+    session: Session,
+    *,
+    listing: Listing,
+    locale: str,
+    is_promoted: bool,
+) -> ListingDetailSchema:
+    summary = _build_listing_summary_schema(listing, locale=locale, is_promoted=is_promoted)
     return ListingDetailSchema(
         **summary.model_dump(),
         description=listing.description,
         moderation_note=listing.moderation_note,
+        owner=_build_owner_card_schema(session, seller=listing.seller),
         media_items=[
             _build_listing_media_schema(media)
             for media in sorted(_active_media(listing), key=lambda item: (item.sort_order, item.id))
@@ -833,12 +1054,151 @@ def _build_listing_status_schema(listing: Listing) -> ListingStatusSchema:
     )
 
 
+def _apply_common_listing_filters(
+    session: Session,
+    *,
+    query: Select,
+    filters: ListingQueryParams,
+    include_status: bool = False,
+) -> Select:
+    if filters.query:
+        term = f"%{filters.query.strip()}%"
+        query = query.where(or_(Listing.title.ilike(term), Listing.description.ilike(term)))
+    if filters.category_public_id:
+        category = session.execute(
+            select(Category).where(Category.public_id == filters.category_public_id, Category.deleted_at.is_(None))
+        ).scalar_one_or_none()
+        if category is None:
+            raise AppError(status_code=404, code="category_not_found", message="Category was not found.")
+        query = query.where(Listing.category_id == category.id)
+    if filters.city:
+        query = query.where(Listing.city.ilike(f"%{filters.city.strip()}%"))
+    if filters.min_price is not None:
+        query = query.where(Listing.price_amount >= filters.min_price)
+    if filters.max_price is not None:
+        query = query.where(Listing.price_amount <= filters.max_price)
+    if include_status and filters.status is not None:
+        query = query.where(Listing.status == filters.status)
+    return query
+
+
+def _paginate_listings(
+    session: Session,
+    *,
+    base_query: Select,
+    locale: str,
+    filters: ListingQueryParams,
+) -> PaginatedListingsResponseSchema:
+    total_items = session.execute(select(func.count()).select_from(base_query.subquery())).scalar_one()
+    if total_items == 0:
+        return PaginatedListingsResponseSchema(
+            items=[],
+            meta=_pagination_meta(page=filters.page, page_size=filters.page_size, total_items=0),
+        )
+
+    now = utcnow()
+    promotion_expr = _active_promotion_exists_expr(now).label("is_promoted")
+    order_by_clauses = _listing_order_by(filters=filters, promotion_expr=promotion_expr)
+
+    rows = session.execute(
+        base_query.add_columns(promotion_expr)
+        .order_by(*order_by_clauses)
+        .offset((filters.page - 1) * filters.page_size)
+        .limit(filters.page_size)
+    ).all()
+    listing_ids = [row[0] for row in rows]
+    promoted_map = {row[0]: bool(row[1]) for row in rows}
+
+    listings = session.execute(_listing_query().where(Listing.id.in_(listing_ids))).scalars().all()
+    listings_by_id = {listing.id: listing for listing in listings}
+    items = [
+        _build_listing_summary_schema(
+            listings_by_id[listing_id],
+            locale=locale,
+            is_promoted=promoted_map.get(listing_id, False),
+        )
+        for listing_id in listing_ids
+        if listing_id in listings_by_id
+    ]
+    return PaginatedListingsResponseSchema(
+        items=items,
+        meta=_pagination_meta(page=filters.page, page_size=filters.page_size, total_items=total_items),
+    )
+
+
+def _listing_order_by(*, filters: ListingQueryParams, promotion_expr) -> list:
+    newest_column = func.coalesce(Listing.published_at, Listing.created_at)
+    if filters.sort == "oldest":
+        ordering = [newest_column.asc(), Listing.id.asc()]
+    elif filters.sort == "price_asc":
+        ordering = [Listing.price_amount.asc(), newest_column.desc(), Listing.id.desc()]
+    elif filters.sort == "price_desc":
+        ordering = [Listing.price_amount.desc(), newest_column.desc(), Listing.id.desc()]
+    else:
+        ordering = [newest_column.desc(), Listing.id.desc()]
+
+    if filters.promoted_first:
+        return [case((promotion_expr, 0), else_=1).asc(), *ordering]
+    return ordering
+
+
+def _active_promotion_exists_expr(now):
+    return exists(
+        select(Promotion.id).where(
+            Promotion.listing_id == Listing.id,
+            Promotion.status == PromotionStatus.ACTIVE,
+            or_(Promotion.starts_at.is_(None), Promotion.starts_at <= now),
+            or_(Promotion.ends_at.is_(None), Promotion.ends_at >= now),
+        )
+    )
+
+
+def _active_promotion_map(session: Session, listing_ids: list[int]) -> dict[int, bool]:
+    if not listing_ids:
+        return {}
+    now = utcnow()
+    promoted_listing_ids = session.execute(
+        select(Promotion.listing_id)
+        .where(
+            Promotion.listing_id.in_(listing_ids),
+            Promotion.status == PromotionStatus.ACTIVE,
+            or_(Promotion.starts_at.is_(None), Promotion.starts_at <= now),
+            or_(Promotion.ends_at.is_(None), Promotion.ends_at >= now),
+        )
+        .group_by(Promotion.listing_id)
+    ).scalars().all()
+    promoted_set = set(promoted_listing_ids)
+    return {listing_id: listing_id in promoted_set for listing_id in listing_ids}
+
+
+def _favorite_unavailable_reason(listing: Listing | None) -> str | None:
+    if listing is None or listing.deleted_at is not None:
+        return "listing_removed"
+    if listing.seller.deleted_at is not None or listing.seller.status != UserStatus.ACTIVE:
+        return "seller_unavailable"
+    if listing.status == ListingStatus.ARCHIVED:
+        return "listing_archived"
+    if listing.status != ListingStatus.PUBLISHED:
+        return "listing_hidden"
+    return None
+
+
+def _pagination_meta(*, page: int, page_size: int, total_items: int) -> PaginationMetaSchema:
+    total_pages = ceil(total_items / page_size) if total_items else 0
+    return PaginationMetaSchema(
+        page=page,
+        page_size=page_size,
+        total_items=total_items,
+        total_pages=total_pages,
+    )
+
+
 def _listing_snapshot(listing: Listing) -> dict:
     return {
         "public_id": listing.public_id,
         "status": listing.status.value,
         "title": listing.title,
         "category_public_id": listing.category.public_id,
-        "price_amount": str(Decimal(listing.price_amount)),
+        "price_amount": str(listing.price_amount),
         "media_count": len(_active_media(listing)),
     }

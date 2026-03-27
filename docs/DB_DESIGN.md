@@ -56,7 +56,7 @@ This matches the actual implementation in `backend/app/db/models/` and the initi
 - `listings`
   Fields: `public_id`, `seller_id`, `category_id`, `title`, `description`, `price_amount`, `currency_code`, `item_condition`, `status`, `city`, `moderation_note`, `published_at`, `deleted_at`, timestamps
   Constraints: unique `public_id`
-  Indexes: `(seller_id, status, created_at)`, `(category_id, status, price_amount)`, `(status, published_at)`
+  Indexes: `(seller_id, status, created_at)`, `(category_id, status, price_amount)`, `(status, published_at)`, `(status, city, published_at)`, `(status, price_amount)`, `title`
 - `listing_media`
   Fields: `public_id`, `listing_id`, `media_type`, `storage_key`, `mime_type`, `file_size_bytes`, `sort_order`, `is_primary`, `deleted_at`, timestamps
   Constraints: unique `(listing_id, sort_order)`
@@ -68,19 +68,21 @@ This matches the actual implementation in `backend/app/db/models/` and the initi
 - `favorites`
   Fields: `user_id`, `listing_id`, timestamps
   Constraints: unique `(user_id, listing_id)`
-  Indexes: `listing_id`
+  Indexes: `listing_id`, `(user_id, created_at)`
 
 ### Messaging
 - `conversations`
   Fields: `public_id`, `listing_id`, `buyer_user_id`, `seller_user_id`, `status`, `last_message_at`, `deleted_at`, timestamps
   Constraints: unique `public_id`, unique `(listing_id, buyer_user_id, seller_user_id)`
-  Indexes: `(status, last_message_at)`
+  Indexes: `(status, last_message_at)`, `(buyer_user_id, last_message_at)`, `(seller_user_id, last_message_at)`
 - `messages`
   Fields: `public_id`, `conversation_id`, `sender_user_id`, `body`, `message_type`, `status`, `read_at`, `deleted_at`, timestamps
   Constraints: unique `public_id`
-  Indexes: `(conversation_id, created_at)`, `(sender_user_id, created_at)`
+  Indexes: `(conversation_id, created_at)`, `(sender_user_id, created_at)`, `(conversation_id, read_at)`
 - `message_attachments`
-  Fields: `message_id`, `attachment_type`, `file_name`, `storage_key`, `mime_type`, `file_size_bytes`, timestamps
+  Fields: `public_id`, `message_id`, `attachment_type`, `file_name`, `storage_key`, `mime_type`, `file_size_bytes`, timestamps
+  Constraints: unique `public_id`
+  Indexes: `message_id`
 
 ### Notifications, reports, and admin visibility
 - `notifications`

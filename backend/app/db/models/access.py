@@ -39,6 +39,15 @@ class User(PublicIdMixin, SoftDeleteMixin, TimestampMixin, Base):
 
     roles: Mapped[list["UserRole"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     listings: Mapped[list["Listing"]] = relationship(back_populates="seller")
+    buyer_conversations: Mapped[list["Conversation"]] = relationship(
+        foreign_keys="Conversation.buyer_user_id",
+        back_populates="buyer",
+    )
+    seller_conversations: Mapped[list["Conversation"]] = relationship(
+        foreign_keys="Conversation.seller_user_id",
+        back_populates="seller",
+    )
+    sent_messages: Mapped[list["Message"]] = relationship(back_populates="sender")
 
 
 class Role(TimestampMixin, Base):

@@ -20,6 +20,8 @@ class Conversation(PublicIdMixin, SoftDeleteMixin, TimestampMixin, Base):
             name="uq_conversations_listing_buyer_seller",
         ),
         Index("ix_conversations_status_last_message_at", "status", "last_message_at"),
+        Index("ix_conversations_buyer_last_message_at", "buyer_user_id", "last_message_at"),
+        Index("ix_conversations_seller_last_message_at", "seller_user_id", "last_message_at"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -36,6 +38,15 @@ class Conversation(PublicIdMixin, SoftDeleteMixin, TimestampMixin, Base):
     )
     last_message_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
+    listing: Mapped["Listing | None"] = relationship(back_populates="conversations")
+    buyer: Mapped["User"] = relationship(
+        foreign_keys=[buyer_user_id],
+        back_populates="buyer_conversations",
+    )
+    seller: Mapped["User"] = relationship(
+        foreign_keys=[seller_user_id],
+        back_populates="seller_conversations",
+    )
     messages: Mapped[list["Message"]] = relationship(back_populates="conversation", cascade="all, delete-orphan")
 
 
@@ -44,6 +55,7 @@ class Message(PublicIdMixin, SoftDeleteMixin, TimestampMixin, Base):
     __table_args__ = (
         Index("ix_messages_conversation_id_created_at", "conversation_id", "created_at"),
         Index("ix_messages_sender_user_id_created_at", "sender_user_id", "created_at"),
+        Index("ix_messages_conversation_id_read_at", "conversation_id", "read_at"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -66,14 +78,19 @@ class Message(PublicIdMixin, SoftDeleteMixin, TimestampMixin, Base):
     read_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     conversation: Mapped["Conversation"] = relationship(back_populates="messages")
+    sender: Mapped["User"] = relationship(back_populates="sent_messages")
     attachments: Mapped[list["MessageAttachment"]] = relationship(
         back_populates="message",
         cascade="all, delete-orphan",
     )
 
 
-class MessageAttachment(TimestampMixin, Base):
+class MessageAttachment(PublicIdMixin, TimestampMixin, Base):
     __tablename__ = "message_attachments"
+    __table_args__ = (
+        Index("ix_message_attachments_message_id", "message_id"),
+        UniqueConstraint("public_id", name="uq_message_attachments_public_id"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     message_id: Mapped[int] = mapped_column(ForeignKey("messages.id", ondelete="CASCADE"), nullable=False)
@@ -87,4 +104,3 @@ class MessageAttachment(TimestampMixin, Base):
     file_size_bytes: Mapped[int | None] = mapped_column(nullable=True)
 
     message: Mapped["Message"] = relationship(back_populates="attachments")
-
