@@ -3,11 +3,11 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import DateTime, Enum, ForeignKey, Index, JSON, String, Text, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 from app.db.enums import NotificationStatus, ReportStatus
-from app.db.mixins import TimestampMixin
+from app.db.mixins import PublicIdMixin, TimestampMixin
 
 
 class Favorite(TimestampMixin, Base):
@@ -21,6 +21,9 @@ class Favorite(TimestampMixin, Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     listing_id: Mapped[int] = mapped_column(ForeignKey("listings.id", ondelete="CASCADE"), nullable=False)
+
+    user: Mapped["User"] = relationship()
+    listing: Mapped["Listing"] = relationship()
 
 
 class Notification(TimestampMixin, Base):
@@ -40,12 +43,16 @@ class Notification(TimestampMixin, Base):
     )
     read_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
+    user: Mapped["User"] = relationship()
 
-class Report(TimestampMixin, Base):
+
+class Report(PublicIdMixin, TimestampMixin, Base):
     __tablename__ = "reports"
     __table_args__ = (
         Index("ix_reports_status_created_at", "status", "created_at"),
         Index("ix_reports_listing_id", "listing_id"),
+        Index("ix_reports_reporter_user_id_created_at", "reporter_user_id", "created_at"),
+        Index("ix_reports_reported_user_id", "reported_user_id"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -75,3 +82,9 @@ class Report(TimestampMixin, Base):
     )
     resolution_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    reporter_user: Mapped["User"] = relationship(foreign_keys=[reporter_user_id])
+    reported_user: Mapped["User | None"] = relationship(foreign_keys=[reported_user_id])
+    listing: Mapped["Listing | None"] = relationship()
+    conversation: Mapped["Conversation | None"] = relationship()
+    resolved_by_user: Mapped["User | None"] = relationship(foreign_keys=[resolved_by_user_id])

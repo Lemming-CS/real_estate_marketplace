@@ -279,22 +279,21 @@ Baseline auth flows:
 ## Payment Strategy
 - Payments are a first-class module with records, statuses, provider references, and event history.
 - The backend must never treat payment success as a boolean flag passed from the client.
-- MVP should support practical marketplace methods:
-  - `cash_on_delivery` for orders
-  - `manual_transfer` for orders or promotions
-  - `demo_gateway` or sandbox provider for promotion purchases
-- Provider adapters allow later addition of Stripe or another gateway without rewriting order or promotion logic.
+- The current MVP uses a mocked provider adapter for promotion purchases, but still persists real payment records and promotion state transitions.
+- `payment_records` remain separate from `promotions` so money movement and marketing activation can be reasoned about independently.
+- Provider adapters allow later addition of Stripe or another gateway without rewriting promotion logic.
 
 The important tradeoff is this: the domain must be real even if the first provider is a controlled sandbox.
 
 ## Promotion Activation Flow
-1. Seller selects a promotion plan for a listing.
-2. Backend verifies listing eligibility and creates a `listing_promotions` record in `pending_payment`.
-3. Backend creates a linked payment record.
-4. Payment becomes `paid` through sandbox/manual confirmation flow.
-5. Promotion moves to `scheduled` or `active` based on start time.
-6. Listing query ranking includes promotion priority only while the promotion is active.
-7. Admin can cancel or override a promotion, but every override is audited.
+1. Seller selects an active promotion package, target scope (`city`, `category`, or both), and a duration that is a whole multiple of the package duration.
+2. Backend validates that the listing is owned by the seller, already `published`, and still eligible for promotion.
+3. Backend creates a `promotions` row in `pending_payment` with snapshot fields: `duration_days`, `price_amount`, `currency_code`, `target_city`, and `target_category_id`.
+4. Backend creates a linked `payment_records` row in `pending` with provider metadata and a mock checkout URL.
+5. Mock provider simulation marks the payment `successful`, `failed`, `cancelled`, or `refunded_ready`.
+6. Only a `successful` payment activates the promotion. Activation sets `starts_at`, `ends_at`, and `activated_at`.
+7. Discovery queries treat a listing as promoted only while the promotion is effectively active.
+8. Expired promotions transition to `expired` through backend logic and generate a user notification.
 
 Important rule: promotion activation happens through application logic, never through direct field edits in admin tables.
 
@@ -319,7 +318,9 @@ What should be logged:
 
 - admin login and logout
 - listing moderation decisions
+- report queue decisions
 - user blocking or role changes
+- promotion package creation and edits
 - promotion overrides
 - order status changes by admins
 - payment status overrides

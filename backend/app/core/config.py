@@ -30,6 +30,7 @@ class Settings(BaseSettings):
 
     smtp_host: str = "127.0.0.1"
     smtp_port: int = 1025
+    mock_payment_checkout_base_url: str = "http://localhost:8000/api/v1"
 
     jwt_secret_key: str = "change-me-in-real-env"
     jwt_access_token_expire_minutes: int = 15

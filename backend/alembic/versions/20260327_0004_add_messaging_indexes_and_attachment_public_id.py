@@ -36,10 +36,16 @@ def upgrade() -> None:
         nullable=False,
     )
     op.create_unique_constraint("uq_message_attachments_public_id", "message_attachments", ["public_id"])
+    op.create_index("ix_conversations_buyer_last_message_at", "conversations", ["buyer_user_id", "last_message_at"])
+    op.create_index("ix_conversations_seller_last_message_at", "conversations", ["seller_user_id", "last_message_at"])
+    op.create_index("ix_messages_conversation_id_read_at", "messages", ["conversation_id", "read_at"])
     op.create_index("ix_message_attachments_message_id", "message_attachments", ["message_id"])
 
 
 def downgrade() -> None:
     op.drop_index("ix_message_attachments_message_id", table_name="message_attachments")
+    op.drop_index("ix_messages_conversation_id_read_at", table_name="messages")
+    op.drop_index("ix_conversations_seller_last_message_at", table_name="conversations")
+    op.drop_index("ix_conversations_buyer_last_message_at", table_name="conversations")
     op.drop_constraint("uq_message_attachments_public_id", "message_attachments", type_="unique")
     op.drop_column("message_attachments", "public_id")

@@ -89,25 +89,25 @@ This matches the actual implementation in `backend/app/db/models/` and the initi
   Fields: `user_id`, `notification_type`, `title`, `body`, `data_json`, `status`, `read_at`, timestamps
   Indexes: `(user_id, status, created_at)`
 - `reports`
-  Fields: `reporter_user_id`, `reported_user_id`, `listing_id`, `conversation_id`, `reason_code`, `description`, `status`, `resolved_by_user_id`, `resolution_note`, `resolved_at`, timestamps
-  Indexes: `(status, created_at)`, `listing_id`
+  Fields: `public_id`, `reporter_user_id`, `reported_user_id`, `listing_id`, `conversation_id`, `reason_code`, `description`, `status`, `resolved_by_user_id`, `resolution_note`, `resolved_at`, timestamps
+  Indexes: `(status, created_at)`, `listing_id`, `(reporter_user_id, created_at)`, `reported_user_id`
 - `admin_audit_logs`
   Fields: `actor_user_id`, `action`, `entity_type`, `entity_id`, `description`, `ip_address`, `user_agent`, `before_json`, `after_json`, `metadata_json`, timestamps
   Indexes: `(actor_user_id, created_at)`, `(entity_type, entity_id)`, `action`
 
 ### Payments and promotions
 - `payment_records`
-  Fields: `public_id`, `payer_user_id`, `listing_id`, `payment_type`, `provider`, `provider_reference`, `amount`, `currency_code`, `status`, `metadata_json`, `paid_at`, `failed_at`, timestamps
+  Fields: `public_id`, `payer_user_id`, `listing_id`, `payment_type`, `provider`, `provider_reference`, `amount`, `currency_code`, `status`, `failure_reason`, `metadata_json`, `paid_at`, `failed_at`, `cancelled_at`, `refunded_ready_at`, timestamps
   Constraints: unique `public_id`, unique `provider_reference`
   Indexes: `(payer_user_id, status, created_at)`, `provider_reference`
 - `promotion_packages`
-  Fields: `code`, `name`, `description`, `duration_days`, `price_amount`, `currency_code`, `boost_level`, `is_active`, timestamps
-  Constraints: unique `code`
+  Fields: `public_id`, `code`, `name`, `description`, `duration_days`, `price_amount`, `currency_code`, `boost_level`, `is_active`, timestamps
+  Constraints: unique `public_id`, unique `code`
   Indexes: `is_active`
 - `promotions`
-  Fields: `public_id`, `listing_id`, `promotion_package_id`, `payment_record_id`, `activated_by_user_id`, `status`, `starts_at`, `ends_at`, `activated_at`, `cancelled_at`, timestamps
+  Fields: `public_id`, `listing_id`, `promotion_package_id`, `payment_record_id`, `activated_by_user_id`, `target_city`, `target_category_id`, `duration_days`, `price_amount`, `currency_code`, `status`, `starts_at`, `ends_at`, `activated_at`, `cancelled_at`, timestamps
   Constraints: unique `public_id`, unique `payment_record_id`
-  Indexes: `(status, starts_at, ends_at)`, `(listing_id, status)`
+  Indexes: `(status, starts_at, ends_at)`, `(listing_id, status)`, `(target_city, status)`, `(target_category_id, status)`
 
 ## Foreign Key Strategy
 - User-linked tables such as `user_roles`, `refresh_tokens`, `favorites`, `notifications`, and `messages` use foreign keys to `users`.
@@ -131,7 +131,7 @@ Implemented enums:
 - `notifications.status`: `unread`, `read`, `archived`
 - `reports.status`: `open`, `in_review`, `resolved`, `rejected`
 - `payment_records.payment_type`: `listing_purchase`, `promotion_purchase`, `manual_adjustment`
-- `payment_records.status`: `pending`, `paid`, `failed`, `cancelled`, `refunded`
+- `payment_records.status`: `pending`, `successful`, `failed`, `cancelled`, `refunded_ready`
 - `promotions.status`: `pending_payment`, `active`, `expired`, `cancelled`
 
 ## Soft Delete Strategy
@@ -195,7 +195,7 @@ The seed command creates:
 - a favorite record
 - a buyer-seller conversation with messages and an attachment
 - sample notifications
-- a sample report
+- sample listing and user report data
 - promotion packages
-- a paid promotion record
+- a successful promotion payment record
 - an admin audit log entry

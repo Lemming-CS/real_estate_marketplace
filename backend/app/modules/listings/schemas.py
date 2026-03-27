@@ -125,6 +125,19 @@ class ListingMediaSchema(BaseModel):
     is_primary: bool
 
 
+class ListingPromotionStateSchema(BaseModel):
+    public_id: str
+    package_public_id: str
+    package_name: str
+    status: str
+    target_city: str | None = None
+    target_category_public_id: str | None = None
+    target_category_name: str | None = None
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    activated_at: datetime | None = None
+
+
 class ListingAttributeValueSchema(BaseModel):
     attribute_code: str
     display_name: str
@@ -149,6 +162,7 @@ class ListingSummarySchema(BaseModel):
     seller: ListingSellerSummarySchema
     primary_media: ListingMediaSchema | None = None
     is_promoted: bool = False
+    promotion_state: ListingPromotionStateSchema | None = None
     published_at: datetime | None = None
     created_at: datetime
     updated_at: datetime

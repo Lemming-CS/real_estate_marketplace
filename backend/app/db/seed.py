@@ -550,7 +550,7 @@ def get_or_create_payment_record(
             provider_reference=provider_reference,
             amount=amount,
             status=status,
-            paid_at=utcnow() if status == PaymentStatus.PAID else None,
+            paid_at=utcnow() if status == PaymentStatus.SUCCESSFUL else None,
             metadata_json={"seeded": True},
         )
         session.add(payment)
@@ -560,7 +560,7 @@ def get_or_create_payment_record(
         payment.listing_id = listing.id
         payment.amount = amount
         payment.status = status
-        payment.paid_at = utcnow() if status == PaymentStatus.PAID else None
+        payment.paid_at = utcnow() if status == PaymentStatus.SUCCESSFUL else None
     return payment
 
 
@@ -585,6 +585,9 @@ def ensure_promotion(
                 payment_record_id=payment.id,
                 activated_by_user_id=activated_by.id,
                 status=PromotionStatus.ACTIVE,
+                duration_days=package.duration_days,
+                price_amount=payment.amount,
+                currency_code=payment.currency_code,
                 starts_at=starts_at,
                 ends_at=ends_at,
                 activated_at=starts_at,
@@ -595,6 +598,9 @@ def ensure_promotion(
     promotion.promotion_package_id = package.id
     promotion.activated_by_user_id = activated_by.id
     promotion.status = PromotionStatus.ACTIVE
+    promotion.duration_days = package.duration_days
+    promotion.price_amount = payment.amount
+    promotion.currency_code = payment.currency_code
     promotion.starts_at = starts_at
     promotion.ends_at = ends_at
     promotion.activated_at = starts_at
@@ -979,7 +985,7 @@ def seed_demo_data() -> None:
             listing=iphone_listing,
             provider_reference="seed-promo-iphone-14-pro",
             amount=Decimal("19.99"),
-            status=PaymentStatus.PAID,
+            status=PaymentStatus.SUCCESSFUL,
         )
         ensure_promotion(
             session,

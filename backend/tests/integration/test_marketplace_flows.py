@@ -9,6 +9,7 @@ from app.core.config import get_settings
 from app.core.security import hash_password
 from app.db.enums import CategoryAttributeType, ListingCondition, ListingStatus, MediaType, PromotionStatus, RoleCode, UserStatus
 from app.db.models import (
+    AdminAuditLog,
     Category,
     CategoryAttribute,
     CategoryAttributeOption,
@@ -19,8 +20,10 @@ from app.db.models import (
     ListingAttributeValue,
     ListingMedia,
     Message,
+    PaymentRecord,
     Promotion,
     PromotionPackage,
+    Report,
     Role,
     User,
     UserRole,
@@ -183,6 +186,9 @@ def _create_published_listing(
                 listing_id=listing.id,
                 promotion_package_id=package.id,
                 status=PromotionStatus.ACTIVE,
+                duration_days=package.duration_days,
+                price_amount=package.price_amount,
+                currency_code=package.currency_code,
                 starts_at=utcnow() - timedelta(days=1),
                 ends_at=utcnow() + timedelta(days=6),
                 activated_at=utcnow() - timedelta(days=1),
@@ -813,3 +819,230 @@ def test_message_attachments_validation_and_secure_download(test_environment):
     )
     assert allowed_download.status_code == 200
     assert allowed_download.headers["content-type"] == "application/pdf"
+
+
+def test_reporting_queue_resolution_and_audit_logging(test_environment):
+    client = test_environment["client"]
+    session_factory = test_environment["session_factory"]
+
+    with session_factory() as session:
+        category = _create_category_with_attributes(session)
+        admin = _create_user(session, email="admin.reports@example.com", username="admin_reports", roles=[RoleCode.ADMIN, RoleCode.USER])
+        seller = _create_user(session, email="seller.reports@example.com", username="seller_reports", roles=[RoleCode.USER, RoleCode.SELLER])
+        buyer = _create_user(session, email="buyer.reports@example.com", username="buyer_reports", roles=[RoleCode.USER])
+        listing = _create_published_listing(
+            session,
+            seller=seller,
+            category=category,
+            title="Canon EOS R6 Body",
+            description="Camera body in good condition with shutter count under 10k.",
+            price_amount="1350.00",
+            city="Bishkek",
+            brand_option="apple",
+            storage_value="128",
+        )
+
+    buyer_headers = _auth_headers(_access_token_for_user(buyer, roles=[RoleCode.USER]))
+    admin_headers = _auth_headers(_access_token_for_user(admin, roles=[RoleCode.ADMIN, RoleCode.USER]))
+
+    listing_report = client.post(
+        "/api/v1/reports",
+        headers=buyer_headers,
+        json={
+            "listing_public_id": listing.public_id,
+            "reported_user_public_id": seller.public_id,
+            "reason_code": "suspicious_listing",
+            "description": "The price looks suspiciously low for this model.",
+        },
+    )
+    assert listing_report.status_code == 201
+    listing_report_public_id = listing_report.json()["public_id"]
+    assert listing_report.json()["status"] == "open"
+
+    user_report = client.post(
+        "/api/v1/reports",
+        headers=buyer_headers,
+        json={
+            "reported_user_public_id": seller.public_id,
+            "reason_code": "abusive_behavior",
+            "description": "The seller used abusive language in chat.",
+        },
+    )
+    assert user_report.status_code == 201
+    user_report_public_id = user_report.json()["public_id"]
+
+    my_reports = client.get("/api/v1/reports/me", headers=buyer_headers)
+    assert my_reports.status_code == 200
+    assert my_reports.json()["meta"]["total_items"] == 2
+
+    admin_queue = client.get("/api/v1/admin/reports", headers=admin_headers, params={"status": "open"})
+    assert admin_queue.status_code == 200
+    assert admin_queue.json()["meta"]["total_items"] == 2
+
+    resolve_listing_report = client.post(
+        f"/api/v1/admin/reports/{listing_report_public_id}/resolve",
+        headers=admin_headers,
+        json={"action": "resolve", "resolution_note": "Listing escalated for manual moderator review."},
+    )
+    assert resolve_listing_report.status_code == 200
+    assert resolve_listing_report.json()["status"] == "resolved"
+
+    dismiss_user_report = client.post(
+        f"/api/v1/admin/reports/{user_report_public_id}/resolve",
+        headers=admin_headers,
+        json={"action": "dismiss", "resolution_note": "Insufficient evidence in the report payload."},
+    )
+    assert dismiss_user_report.status_code == 200
+    assert dismiss_user_report.json()["status"] == "rejected"
+
+    with session_factory() as session:
+        reports = session.query(Report).order_by(Report.created_at.asc()).all()
+        assert reports[0].status.value == "resolved"
+        assert reports[1].status.value == "rejected"
+        audit_actions = {log.action for log in session.query(AdminAuditLog).all()}
+        assert "report.resolve" in audit_actions
+        assert "report.dismiss" in audit_actions
+
+
+def test_payment_to_promotion_activation_flow_and_invalid_attempts(test_environment):
+    client = test_environment["client"]
+    session_factory = test_environment["session_factory"]
+
+    with session_factory() as session:
+        category = _create_category_with_attributes(session)
+        admin = _create_user(session, email="admin.commerce@example.com", username="admin_commerce", roles=[RoleCode.ADMIN, RoleCode.USER])
+        seller = _create_user(session, email="seller.commerce@example.com", username="seller_commerce", roles=[RoleCode.USER, RoleCode.SELLER])
+        listing = _create_published_listing(
+            session,
+            seller=seller,
+            category=category,
+            title="DJI Mini 4 Pro",
+            description="Drone kit with spare battery, controller, and original packaging.",
+            price_amount="990.00",
+            city="Bishkek",
+            brand_option="apple",
+            storage_value="256",
+        )
+        draft_listing = _create_published_listing(
+            session,
+            seller=seller,
+            category=category,
+            title="Steam Deck OLED Draft",
+            description="Draft console listing waiting for final photos and moderation review.",
+            price_amount="650.00",
+            city="Bishkek",
+            brand_option="apple",
+            storage_value="512",
+        )
+        draft_listing.status = ListingStatus.DRAFT
+        draft_listing.published_at = None
+        session.commit()
+        session.refresh(draft_listing)
+
+    admin_headers = _auth_headers(_access_token_for_user(admin, roles=[RoleCode.ADMIN, RoleCode.USER]))
+    seller_headers = _auth_headers(_access_token_for_user(seller, roles=[RoleCode.USER, RoleCode.SELLER]))
+
+    create_package = client.post(
+        "/api/v1/admin/promotion-packages",
+        headers=admin_headers,
+        json={
+            "code": "featured_bishkek_7d",
+            "name": "Featured Bishkek 7 Days",
+            "description": "Boost listing visibility in Bishkek category feeds.",
+            "duration_days": 7,
+            "price_amount": "10.00",
+            "currency_code": "USD",
+            "boost_level": 8,
+        },
+    )
+    assert create_package.status_code == 201
+    package_public_id = create_package.json()["public_id"]
+
+    public_packages = client.get("/api/v1/promotion-packages")
+    assert public_packages.status_code == 200
+    assert public_packages.json()[0]["public_id"] == package_public_id
+
+    invalid_draft_attempt = client.post(
+        "/api/v1/payments/promotions/initiate",
+        headers=seller_headers,
+        json={
+            "listing_public_id": draft_listing.public_id,
+            "package_public_id": package_public_id,
+            "duration_days": 7,
+            "target_city": "Bishkek",
+            "target_category_public_id": category.public_id,
+        },
+    )
+    assert invalid_draft_attempt.status_code == 409
+    assert invalid_draft_attempt.json()["error"]["code"] == "listing_not_promotable"
+
+    initiate_payment = client.post(
+        "/api/v1/payments/promotions/initiate",
+        headers=seller_headers,
+        json={
+            "listing_public_id": listing.public_id,
+            "package_public_id": package_public_id,
+            "duration_days": 14,
+            "target_city": "Bishkek",
+            "target_category_public_id": category.public_id,
+        },
+    )
+    assert initiate_payment.status_code == 201
+    assert initiate_payment.json()["payment"]["status"] == "pending"
+    assert initiate_payment.json()["promotion"]["status"] == "pending_payment"
+    assert initiate_payment.json()["price_breakdown"]["total_amount"] == "20.00"
+    payment_public_id = initiate_payment.json()["payment"]["public_id"]
+    promotion_public_id = initiate_payment.json()["promotion"]["public_id"]
+
+    seller_payments = client.get("/api/v1/payments", headers=seller_headers)
+    assert seller_payments.status_code == 200
+    assert seller_payments.json()["meta"]["total_items"] == 1
+
+    seller_promotions = client.get("/api/v1/promotions/me", headers=seller_headers)
+    assert seller_promotions.status_code == 200
+    assert seller_promotions.json()["items"][0]["status"] == "pending_payment"
+
+    admin_payments = client.get("/api/v1/admin/payments", headers=admin_headers)
+    assert admin_payments.status_code == 200
+    assert admin_payments.json()["meta"]["total_items"] == 1
+
+    simulate_success = client.post(
+        f"/api/v1/payments/{payment_public_id}/simulate",
+        headers=seller_headers,
+        json={"result": "successful"},
+    )
+    assert simulate_success.status_code == 200
+    assert simulate_success.json()["payment"]["status"] == "successful"
+    assert simulate_success.json()["promotion"]["status"] == "active"
+
+    listing_detail = client.get(f"/api/v1/listings/{listing.public_id}")
+    assert listing_detail.status_code == 200
+    assert listing_detail.json()["is_promoted"] is True
+    assert listing_detail.json()["promotion_state"]["public_id"] == promotion_public_id
+    assert listing_detail.json()["promotion_state"]["status"] == "active"
+
+    seller_notifications = client.get("/api/v1/notifications", headers=seller_headers)
+    assert seller_notifications.status_code == 200
+    notification_types = [item["notification_type"] for item in seller_notifications.json()["items"]]
+    assert "payment.successful" in notification_types
+    assert "promotion.activated" in notification_types
+
+    with session_factory() as session:
+        promotion = session.query(Promotion).filter(Promotion.public_id == promotion_public_id).one()
+        promotion.ends_at = utcnow() - timedelta(days=1)
+        session.commit()
+
+    expired_promotions = client.get("/api/v1/promotions/me", headers=seller_headers)
+    assert expired_promotions.status_code == 200
+    assert expired_promotions.json()["items"][0]["status"] == "expired"
+
+    notifications_after_expiry = client.get("/api/v1/notifications", headers=seller_headers)
+    assert notifications_after_expiry.status_code == 200
+    notification_types_after_expiry = [item["notification_type"] for item in notifications_after_expiry.json()["items"]]
+    assert "promotion.expired" in notification_types_after_expiry
+
+    with session_factory() as session:
+        payment = session.query(PaymentRecord).filter(PaymentRecord.public_id == payment_public_id).one()
+        assert payment.status.value == "successful"
+        promotion = session.query(Promotion).filter(Promotion.public_id == promotion_public_id).one()
+        assert promotion.status.value == "expired"

@@ -87,10 +87,10 @@ class ReportStatus(StrEnum):
 
 class PaymentStatus(StrEnum):
     PENDING = "pending"
-    PAID = "paid"
+    SUCCESSFUL = "successful"
     FAILED = "failed"
     CANCELLED = "cancelled"
-    REFUNDED = "refunded"
+    REFUNDED_READY = "refunded_ready"
 
 
 class PaymentType(StrEnum):

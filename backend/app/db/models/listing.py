@@ -60,6 +60,7 @@ class Listing(PublicIdMixin, SoftDeleteMixin, TimestampMixin, Base):
         cascade="all, delete-orphan",
     )
     conversations: Mapped[list["Conversation"]] = relationship(back_populates="listing")
+    promotions: Mapped[list["Promotion"]] = relationship(back_populates="listing")
     attribute_values: Mapped[list["ListingAttributeValue"]] = relationship(
         back_populates="listing",
         cascade="all, delete-orphan",

@@ -21,6 +21,7 @@ from app.db.models import (
     ListingAttributeValue,
     ListingMedia,
     Promotion,
+    PromotionPackage,
     Role,
     User,
     UserRole,
@@ -36,6 +37,7 @@ from app.modules.listings.schemas import (
     ListingMediaOrderRequest,
     ListingMediaSchema,
     ListingOwnerCardSchema,
+    ListingPromotionStateSchema,
     ListingQueryParams,
     ListingSellerSummarySchema,
     ListingStatusSchema,
@@ -128,6 +130,7 @@ def get_listing_detail(
         listing=listing,
         locale=locale,
         is_promoted=_active_promotion_map(session, [listing.id]).get(listing.id, False),
+        promotion_state=_active_promotion_state_map(session, [listing.id]).get(listing.id),
     )
 
 
@@ -166,6 +169,7 @@ def create_listing(
         listing=_get_listing_or_404(session, listing_public_id=listing.public_id),
         locale=locale,
         is_promoted=False,
+        promotion_state=None,
     )
 
 
@@ -228,6 +232,7 @@ def update_listing(
         listing=_get_listing_or_404(session, listing_public_id=listing.public_id),
         locale=locale,
         is_promoted=_active_promotion_map(session, [listing.id]).get(listing.id, False),
+        promotion_state=_active_promotion_state_map(session, [listing.id]).get(listing.id),
     )
 
 
@@ -581,6 +586,7 @@ def review_listing(
         listing=_get_listing_or_404(session, listing_public_id=listing.public_id),
         locale=locale,
         is_promoted=_active_promotion_map(session, [listing.id]).get(listing.id, False),
+        promotion_state=_active_promotion_state_map(session, [listing.id]).get(listing.id),
     )
 
 
@@ -991,6 +997,7 @@ def _build_listing_summary_schema(
     *,
     locale: str,
     is_promoted: bool,
+    promotion_state: ListingPromotionStateSchema | None = None,
 ) -> ListingSummarySchema:
     primary_media = _primary_media(listing)
     return ListingSummarySchema(
@@ -1005,6 +1012,7 @@ def _build_listing_summary_schema(
         seller=_build_listing_seller_schema(listing.seller),
         primary_media=_build_listing_media_schema(primary_media) if primary_media else None,
         is_promoted=is_promoted,
+        promotion_state=promotion_state,
         published_at=listing.published_at,
         created_at=listing.created_at,
         updated_at=listing.updated_at,
@@ -1017,8 +1025,14 @@ def _build_listing_detail_schema(
     listing: Listing,
     locale: str,
     is_promoted: bool,
+    promotion_state: ListingPromotionStateSchema | None = None,
 ) -> ListingDetailSchema:
-    summary = _build_listing_summary_schema(listing, locale=locale, is_promoted=is_promoted)
+    summary = _build_listing_summary_schema(
+        listing,
+        locale=locale,
+        is_promoted=is_promoted,
+        promotion_state=promotion_state,
+    )
     return ListingDetailSchema(
         **summary.model_dump(),
         description=listing.description,
@@ -1108,6 +1122,7 @@ def _paginate_listings(
     ).all()
     listing_ids = [row[0] for row in rows]
     promoted_map = {row[0]: bool(row[1]) for row in rows}
+    promotion_state_map = _active_promotion_state_map(session, listing_ids)
 
     listings = session.execute(_listing_query().where(Listing.id.in_(listing_ids))).scalars().all()
     listings_by_id = {listing.id: listing for listing in listings}
@@ -1116,6 +1131,7 @@ def _paginate_listings(
             listings_by_id[listing_id],
             locale=locale,
             is_promoted=promoted_map.get(listing_id, False),
+            promotion_state=promotion_state_map.get(listing_id),
         )
         for listing_id in listing_ids
         if listing_id in listings_by_id
@@ -1169,6 +1185,44 @@ def _active_promotion_map(session: Session, listing_ids: list[int]) -> dict[int,
     ).scalars().all()
     promoted_set = set(promoted_listing_ids)
     return {listing_id: listing_id in promoted_set for listing_id in listing_ids}
+
+
+def _active_promotion_state_map(session: Session, listing_ids: list[int]) -> dict[int, ListingPromotionStateSchema]:
+    if not listing_ids:
+        return {}
+    now = utcnow()
+    promotions = session.execute(
+        select(Promotion)
+        .options(
+            selectinload(Promotion.package),
+            selectinload(Promotion.target_category).selectinload(Category.translations),
+        )
+        .where(
+            Promotion.listing_id.in_(listing_ids),
+            Promotion.status == PromotionStatus.ACTIVE,
+            or_(Promotion.starts_at.is_(None), Promotion.starts_at <= now),
+            or_(Promotion.ends_at.is_(None), Promotion.ends_at >= now),
+        )
+        .order_by(Promotion.created_at.desc(), Promotion.id.desc())
+    ).scalars().all()
+    promotion_map: dict[int, ListingPromotionStateSchema] = {}
+    for promotion in promotions:
+        if promotion.listing_id in promotion_map:
+            continue
+        target_translation = _resolved_translation(promotion.target_category, locale="en") if promotion.target_category else None
+        promotion_map[promotion.listing_id] = ListingPromotionStateSchema(
+            public_id=promotion.public_id,
+            package_public_id=promotion.package.public_id,
+            package_name=promotion.package.name,
+            status=promotion.status.value,
+            target_city=promotion.target_city,
+            target_category_public_id=promotion.target_category.public_id if promotion.target_category else None,
+            target_category_name=target_translation.name if target_translation else None,
+            starts_at=promotion.starts_at,
+            ends_at=promotion.ends_at,
+            activated_at=promotion.activated_at,
+        )
+    return promotion_map
 
 
 def _favorite_unavailable_reason(listing: Listing | None) -> str | None:

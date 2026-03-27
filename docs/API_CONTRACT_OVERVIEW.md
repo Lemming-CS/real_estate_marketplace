@@ -77,11 +77,15 @@
 - `POST /api/v1/orders/{orderId}/mark-delivered`
 
 ### Promotions and payments
-- `GET /api/v1/promotion-plans`
-- `POST /api/v1/listings/{listingId}/promotions`
-- `GET /api/v1/me/promotions`
+- `GET /api/v1/promotion-packages`
+- `POST /api/v1/payments/promotions/initiate`
 - `GET /api/v1/payments`
-- `GET /api/v1/payments/{paymentId}`
+- `POST /api/v1/payments/{paymentPublicId}/simulate`
+- `GET /api/v1/promotions/me`
+
+### Reports
+- `POST /api/v1/reports`
+- `GET /api/v1/reports/me`
 
 ### Notifications
 - `GET /api/v1/notifications`
@@ -94,6 +98,13 @@
 - `DELETE /api/v1/admin/categories/{categoryPublicId}`
 - `GET /api/v1/admin/listings/moderation`
 - `POST /api/v1/admin/listings/{listingPublicId}/review`
+- `GET /api/v1/admin/reports`
+- `POST /api/v1/admin/reports/{reportPublicId}/resolve`
+- `GET /api/v1/admin/payments`
+- `GET /api/v1/admin/promotion-packages`
+- `POST /api/v1/admin/promotion-packages`
+- `PATCH /api/v1/admin/promotion-packages/{packagePublicId}`
+- `DELETE /api/v1/admin/promotion-packages/{packagePublicId}`
 
 ## Discovery Query Params
 - `q`: keyword search across title and description
@@ -247,7 +258,66 @@
     "profile_image_path": "profile-images/usr_seller/avatar.jpg",
     "active_listing_count": 12,
     "created_at": "2026-01-01T10:00:00Z"
+  },
+  "promotion_state": {
+    "public_id": "promo_123",
+    "package_public_id": "pkg_123",
+    "package_name": "Featured Bishkek 7 Days",
+    "status": "active",
+    "target_city": "Bishkek",
+    "target_category_public_id": "cat_laptops",
+    "target_category_name": "Laptops",
+    "starts_at": "2026-03-27T12:00:00Z",
+    "ends_at": "2026-04-03T12:00:00Z"
   }
+}
+```
+
+### Promotion payment initiation
+```json
+{
+  "listing_public_id": "lst_123",
+  "package_public_id": "pkg_featured",
+  "duration_days": 14,
+  "target_city": "Bishkek",
+  "target_category_public_id": "cat_laptops"
+}
+```
+
+```json
+{
+  "payment": {
+    "public_id": "pay_123",
+    "payment_type": "promotion_purchase",
+    "status": "pending",
+    "amount": "20.00",
+    "currency_code": "USD",
+    "checkout_url": "http://localhost:8000/api/v1/payments/pay_123/simulate?result=successful"
+  },
+  "promotion": {
+    "public_id": "pro_123",
+    "status": "pending_payment",
+    "listing_public_id": "lst_123",
+    "package_public_id": "pkg_featured",
+    "duration_days": 14
+  },
+  "price_breakdown": {
+    "base_duration_days": 7,
+    "selected_duration_days": 14,
+    "base_price_amount": "10.00",
+    "total_amount": "20.00",
+    "currency_code": "USD"
+  }
+}
+```
+
+### Report creation
+```json
+{
+  "listing_public_id": "lst_123",
+  "reported_user_public_id": "usr_seller",
+  "reason_code": "suspicious_listing",
+  "description": "Price and description look suspicious."
 }
 ```
 

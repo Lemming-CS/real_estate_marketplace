@@ -30,7 +30,7 @@ services:
       APP_HOST: 0.0.0.0
       APP_PORT: 8000
       APP_LOG_LEVEL: INFO
-      APP_CORS_ORIGINS: http://localhost:${ADMIN_PORT:-5173},http://127.0.0.1:${ADMIN_PORT:-5173}
+      APP_CORS_ORIGINS: '["http://localhost:5173","http://127.0.0.1:5173"]'
       MYSQL_HOST: mysql
       MYSQL_PORT: 3306
       MYSQL_DATABASE: ${MYSQL_DATABASE}
