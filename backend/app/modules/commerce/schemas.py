@@ -40,6 +40,7 @@ class PromotionPackageSchema(BaseModel):
     currency_code: str
     boost_level: int
     is_active: bool
+    status: Literal["active", "inactive"]
     created_at: datetime
     updated_at: datetime
 

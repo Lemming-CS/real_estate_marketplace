@@ -17,6 +17,7 @@ from app.api.routes.conversations import router as conversations_router
 from app.api.routes.favorites import router as favorites_router
 from app.api.routes.health import router as health_router
 from app.api.routes.listings import router as listings_router
+from app.api.routes.media import router as media_router
 from app.api.routes.notifications import router as notifications_router
 from app.api.routes.payments import router as payments_router
 from app.api.routes.profile import router as profile_router
@@ -33,6 +34,7 @@ api_router.include_router(categories_router)
 api_router.include_router(conversations_router)
 api_router.include_router(favorites_router)
 api_router.include_router(listings_router)
+api_router.include_router(media_router)
 api_router.include_router(notifications_router)
 api_router.include_router(payments_router)
 api_router.include_router(profile_router)

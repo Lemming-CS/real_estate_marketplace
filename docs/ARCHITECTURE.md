@@ -301,6 +301,12 @@ The important tradeoff is this: the domain must be real even if the first provid
 7. Discovery queries treat a listing as promoted only while the promotion is effectively active.
 8. Expired promotions transition to `expired` through backend logic and generate a user notification.
 
+Promotion packages themselves use a reversible lifecycle:
+- `active`: selectable in purchase flows and visible from the public package list
+- `inactive`: hidden from purchase flows but still preserved for historical payment and promotion records
+
+Deactivation is intentionally non-destructive. Admins can soft-disable a package and later reactivate it without breaking the existing payment or promotion history tied to that package.
+
 Important rule: promotion activation happens through application logic, never through direct field edits in admin tables.
 
 ## Moderation Flow
@@ -322,7 +328,7 @@ What should be logged:
 - listing moderation decisions
 - report queue decisions
 - user blocking or role changes
-- promotion package creation and edits
+- promotion package creation, activation, deactivation, and edits
 - promotion overrides
 - order status changes by admins
 - payment status overrides

@@ -13,7 +13,8 @@ export function ReportsPage() {
 
   const reportsQuery = useQuery({
     queryKey: ['admin-reports', status],
-    queryFn: () => auth.authenticatedRequest('/admin/reports', { query: { status } }),
+    queryFn: () =>
+      auth.authenticatedRequest('/admin/reports', { query: { status } }),
   });
 
   const actionMutation = useMutation({
@@ -22,12 +23,14 @@ export function ReportsPage() {
         method: 'POST',
         body: {
           action,
-          resolution_note: window.prompt(`Resolution note for ${action}:`) ?? '',
+          resolution_note:
+            window.prompt(`Resolution note for ${action}:`) ?? '',
           listing_action,
           user_action,
         },
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-reports'] }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ['admin-reports'] }),
   });
 
   const rows = reportsQuery.data?.items ?? [];
@@ -42,7 +45,11 @@ export function ReportsPage() {
       <TableCard
         title="Reports queue"
         actions={
-          <select className="toolbar-select" value={status} onChange={(event) => setStatus(event.target.value)}>
+          <select
+            className="toolbar-select"
+            value={status}
+            onChange={(event) => setStatus(event.target.value)}
+          >
             <option value="">All statuses</option>
             <option value="open">Open</option>
             <option value="in_review">In review</option>
@@ -51,7 +58,11 @@ export function ReportsPage() {
           </select>
         }
       >
-        <QueryState isLoading={reportsQuery.isLoading} error={reportsQuery.error} isEmpty={!rows.length}>
+        <QueryState
+          isLoading={reportsQuery.isLoading}
+          error={reportsQuery.error}
+          isEmpty={!rows.length}
+        >
           <table className="data-table">
             <thead>
               <tr>
@@ -65,39 +76,109 @@ export function ReportsPage() {
             </thead>
             <tbody>
               {rows.map((report) => (
-                <tr key={report.public_id}>
-                  <td>
-                    <strong>{report.reason_code}</strong>
-                    <div className="muted-text">{report.description ?? 'No description'}</div>
-                  </td>
-                  <td><StatusBadge value={report.status} /></td>
-                  <td>
-                    <div className="muted-text">Listing: {report.listing_status ?? 'n/a'}</div>
-                    <div className="muted-text">User: {report.reported_user_status ?? 'n/a'}</div>
-                  </td>
-                  <td>{report.reporter_username}</td>
-                  <td>{report.listing_title ?? report.reported_username ?? 'Unknown target'}</td>
-                  <td className="table-actions">
-                    <button className="secondary-button" type="button" onClick={() => actionMutation.mutate({ reportPublicId: report.public_id, action: 'in_review' })}>
-                      In Review
-                    </button>
-                    <button className="secondary-button" type="button" onClick={() => actionMutation.mutate({ reportPublicId: report.public_id, action: 'resolve', listing_action: 'hide' })}>
-                      Hide Listing
-                    </button>
-                    <button className="secondary-button" type="button" onClick={() => actionMutation.mutate({ reportPublicId: report.public_id, action: 'resolve', listing_action: 'archive' })}>
-                      Archive Listing
-                    </button>
-                    <button className="secondary-button" type="button" onClick={() => actionMutation.mutate({ reportPublicId: report.public_id, action: 'resolve', user_action: 'suspend' })}>
-                      Suspend Seller
-                    </button>
-                    <button className="secondary-button" type="button" onClick={() => actionMutation.mutate({ reportPublicId: report.public_id, action: 'resolve' })}>
-                      Resolve
-                    </button>
-                    <button className="danger-button" type="button" onClick={() => actionMutation.mutate({ reportPublicId: report.public_id, action: 'dismiss' })}>
-                      Dismiss
-                    </button>
-                  </td>
-                </tr>
+                <>
+                  <tr key={report.public_id}>
+                    <td>
+                      <strong>{report.reason_code}</strong>
+                      <div className="muted-text">
+                        {report.description ?? 'No description'}
+                      </div>
+                    </td>
+                    <td>
+                      <StatusBadge value={report.status} />
+                    </td>
+                    <td>
+                      <div className="muted-text">
+                        Listing: {report.listing_status ?? 'n/a'}
+                      </div>
+                      <div className="muted-text">
+                        User: {report.reported_user_status ?? 'n/a'}
+                      </div>
+                    </td>
+                    <td>{report.reporter_username}</td>
+                    <td>
+                      {report.listing_title ??
+                        report.reported_username ??
+                        'Unknown target'}
+                    </td>
+                  </tr>
+
+                  <tr className="actions-row">
+                    <td colSpan={5}>
+                      <div className="table-actions">
+                        <button
+                        className="secondary-button"
+                          onClick={() =>
+                            actionMutation.mutate({
+                              reportPublicId: report.public_id,
+                              action: 'in_review',
+                            })
+                          }
+                        >
+                          In Review
+                        </button>
+                        <button
+                        className="secondary-button"
+                          onClick={() =>
+                            actionMutation.mutate({
+                              reportPublicId: report.public_id,
+                              action: 'resolve',
+                              listing_action: 'hide',
+                            })
+                          }
+                        >
+                          Hide Listing
+                        </button>
+                        <button
+                        className="secondary-button"
+                          onClick={() =>
+                            actionMutation.mutate({
+                              reportPublicId: report.public_id,
+                              action: 'resolve',
+                              listing_action: 'archive',
+                            })
+                          }
+                        >
+                          Archive Listing
+                        </button>
+                        <button
+                        className="secondary-button"
+                          onClick={() =>
+                            actionMutation.mutate({
+                              reportPublicId: report.public_id,
+                              action: 'resolve',
+                              user_action: 'suspend',
+                            })
+                          }
+                        >
+                          Suspend Seller
+                        </button>
+                        <button
+                        className="secondary-button"
+                          onClick={() =>
+                            actionMutation.mutate({
+                              reportPublicId: report.public_id,
+                              action: 'resolve',
+                            })
+                          }
+                        >
+                          Resolve
+                        </button>
+                        <button
+                          className="danger-button"
+                          onClick={() =>
+                            actionMutation.mutate({
+                              reportPublicId: report.public_id,
+                              action: 'dismiss',
+                            })
+                          }
+                        >
+                          Dismiss
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                </>
               ))}
             </tbody>
           </table>

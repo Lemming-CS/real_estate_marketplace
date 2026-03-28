@@ -104,6 +104,7 @@ This matches the actual implementation in `backend/app/db/models/` and the initi
   Fields: `public_id`, `code`, `name`, `description`, `duration_days`, `price_amount`, `currency_code`, `boost_level`, `is_active`, timestamps
   Constraints: unique `public_id`, unique `code`
   Indexes: `is_active`
+  Lifecycle: packages are soft-disabled through `is_active`; rows are preserved so historical `promotions` and `payment_records` stay linked to the original package
 - `promotions`
   Fields: `public_id`, `listing_id`, `promotion_package_id`, `payment_record_id`, `activated_by_user_id`, `target_city`, `target_category_id`, `duration_days`, `price_amount`, `currency_code`, `status`, `starts_at`, `ends_at`, `activated_at`, `cancelled_at`, timestamps
   Constraints: unique `public_id`, unique `payment_record_id`

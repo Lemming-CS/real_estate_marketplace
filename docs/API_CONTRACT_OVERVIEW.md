@@ -105,7 +105,10 @@
 - `GET /api/v1/admin/promotion-packages`
 - `POST /api/v1/admin/promotion-packages`
 - `PATCH /api/v1/admin/promotion-packages/{packagePublicId}`
-- `DELETE /api/v1/admin/promotion-packages/{packagePublicId}`
+- `DELETE /api/v1/admin/promotion-packages/{packagePublicId}` soft-deactivates the package
+- `POST /api/v1/admin/promotion-packages/{packagePublicId}/activate` reactivates a previously inactive package
+
+Promotion packages are soft-disabled, not deleted. Historical promotions and payments remain linked to the same package row even if the package becomes unavailable for new purchases.
 
 ## Discovery Query Params
 - `q`: keyword search across title and description

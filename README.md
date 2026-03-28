@@ -29,6 +29,8 @@ Detailed architecture and planning docs:
 - [Database Design](/home/lemming/Projects/marketplace-assignment/docs/DB_DESIGN.md)
 - [Interaction Model](/home/lemming/Projects/marketplace-assignment/docs/INTERACTION_MODEL.md)
 
+Backend start: uvicorn app.main:create_app --factory --reload
+
 ## Repo Structure
 ```text
 .

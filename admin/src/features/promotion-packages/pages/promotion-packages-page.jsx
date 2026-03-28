@@ -48,6 +48,12 @@ export function PromotionPackagesPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-promotion-packages'] }),
   });
 
+  const activateMutation = useMutation({
+    mutationFn: (packagePublicId) =>
+      auth.authenticatedRequest(`/admin/promotion-packages/${packagePublicId}/activate`, { method: 'POST' }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-promotion-packages'] }),
+  });
+
   const packages = useMemo(() => packagesQuery.data ?? [], [packagesQuery.data]);
 
   function loadPackage(item) {
@@ -138,7 +144,7 @@ export function PromotionPackagesPage() {
                       <strong>{item.name}</strong>
                       <div className="muted-text">{item.code}</div>
                     </td>
-                    <td><StatusBadge value={item.is_active ? 'active' : 'inactive'} /></td>
+                    <td><StatusBadge value={item.status ?? (item.is_active ? 'active' : 'inactive')} /></td>
                     <td>{item.duration_days} days</td>
                     <td>{item.price_amount} {item.currency_code}</td>
                     <td className="table-actions">
@@ -147,7 +153,11 @@ export function PromotionPackagesPage() {
                         <button className="danger-button" type="button" onClick={() => deactivateMutation.mutate(item.public_id)}>
                           Deactivate
                         </button>
-                      ) : null}
+                      ) : (
+                        <button className="secondary-button" type="button" onClick={() => activateMutation.mutate(item.public_id)}>
+                          Activate
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}

@@ -169,6 +169,45 @@ def deactivate_promotion_package(
     return _build_package_schema(package)
 
 
+def activate_promotion_package(
+    session: Session,
+    *,
+    package_public_id: str,
+    actor: User,
+    ip_address: str | None = None,
+    user_agent: str | None = None,
+) -> PromotionPackageSchema:
+    package = _get_package_or_404(session, package_public_id=package_public_id)
+    duplicate = session.execute(
+        select(PromotionPackage).where(
+            PromotionPackage.code == package.code,
+            PromotionPackage.id != package.id,
+        )
+    ).scalar_one_or_none()
+    if duplicate is not None:
+        raise AppError(
+            status_code=409,
+            code="promotion_package_code_conflict",
+            message="Another promotion package already uses this code.",
+        )
+    before_json = _package_snapshot(package)
+    package.is_active = True
+    session.flush()
+    record_admin_audit_log(
+        session,
+        actor=actor,
+        action="promotion_package.activate",
+        entity_type="promotion_package",
+        entity_id=package.public_id,
+        description=f"Activated promotion package '{package.code}'.",
+        ip_address=ip_address,
+        user_agent=user_agent,
+        before_json=before_json,
+        after_json=_package_snapshot(package),
+    )
+    return _build_package_schema(package)
+
+
 def initiate_promotion_payment(
     session: Session,
     *,
@@ -627,6 +666,7 @@ def _build_package_schema(package: PromotionPackage) -> PromotionPackageSchema:
         currency_code=package.currency_code,
         boost_level=package.boost_level,
         is_active=package.is_active,
+        status="active" if package.is_active else "inactive",
         created_at=package.created_at,
         updated_at=package.updated_at,
     )

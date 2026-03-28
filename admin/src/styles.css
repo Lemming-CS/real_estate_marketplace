@@ -497,7 +497,9 @@ a {
   flex-direction: column;
   gap: 0.9rem;
 }
-
+.table-actions button {
+  flex: 1;
+}
 .nav-links {
   margin-top: 40px;
 }

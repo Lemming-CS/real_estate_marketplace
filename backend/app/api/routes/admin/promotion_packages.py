@@ -12,6 +12,7 @@ from app.modules.commerce.schemas import (
     PromotionPackageUpdateRequest,
 )
 from app.modules.commerce.service import (
+    activate_promotion_package,
     create_promotion_package,
     deactivate_promotion_package,
     list_admin_promotion_packages,
@@ -100,6 +101,29 @@ def admin_package_delete(
     current_user: User = Depends(require_roles(RoleCode.ADMIN)),
 ) -> PromotionPackageSchema:
     response = deactivate_promotion_package(
+        db,
+        package_public_id=package_public_id,
+        actor=current_user,
+        ip_address=_client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+    )
+    db.commit()
+    return response
+
+
+@router.post(
+    "/{package_public_id}/activate",
+    response_model=PromotionPackageSchema,
+    summary="Reactivate a promotion package",
+)
+def admin_package_activate(
+    package_public_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_account_status(UserStatus.ACTIVE)),
+    current_user: User = Depends(require_roles(RoleCode.ADMIN)),
+) -> PromotionPackageSchema:
+    response = activate_promotion_package(
         db,
         package_public_id=package_public_id,
         actor=current_user,

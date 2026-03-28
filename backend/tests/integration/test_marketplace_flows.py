@@ -1081,6 +1081,28 @@ def test_payment_to_promotion_activation_flow_and_invalid_attempts(test_environm
     assert public_packages.status_code == 200
     assert public_packages.json()[0]["public_id"] == package_public_id
 
+    deactivate_package = client.delete(
+        f"/api/v1/admin/promotion-packages/{package_public_id}",
+        headers=admin_headers,
+    )
+    assert deactivate_package.status_code == 200
+    assert deactivate_package.json()["status"] == "inactive"
+
+    hidden_packages = client.get("/api/v1/promotion-packages")
+    assert hidden_packages.status_code == 200
+    assert package_public_id not in [item["public_id"] for item in hidden_packages.json()]
+
+    reactivate_package = client.post(
+        f"/api/v1/admin/promotion-packages/{package_public_id}/activate",
+        headers=admin_headers,
+    )
+    assert reactivate_package.status_code == 200
+    assert reactivate_package.json()["status"] == "active"
+
+    visible_packages_again = client.get("/api/v1/promotion-packages")
+    assert visible_packages_again.status_code == 200
+    assert package_public_id in [item["public_id"] for item in visible_packages_again.json()]
+
     invalid_draft_attempt = client.post(
         "/api/v1/payments/promotions/initiate",
         headers=seller_headers,
