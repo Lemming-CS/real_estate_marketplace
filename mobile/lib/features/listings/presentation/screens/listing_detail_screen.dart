@@ -30,8 +30,6 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
   Widget build(BuildContext context) {
     final detailAsync = ref.watch(listingDetailProvider(widget.listingId));
     final authState = ref.watch(authControllerProvider);
-    final favoritesAsync =
-        authState.isAuthenticated ? ref.watch(favoritesProvider) : null;
 
     return Scaffold(
       appBar: AppBar(
@@ -43,41 +41,16 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
             tooltip: context.tr('Home', 'Главная'),
           ),
           if (authState.isAuthenticated)
-            favoritesAsync?.maybeWhen(
-                  data: (page) {
-                    final isFavorited = page.items.any(
-                        (item) => item.listingPublicId == widget.listingId);
-                    return IconButton(
-                      onPressed: _favoriteBusy
-                          ? null
-                          : () async {
-                              final repository =
-                                  ref.read(listingsRepositoryProvider);
-                              setState(() => _favoriteBusy = true);
-                              try {
-                                await repository.toggleFavorite(
-                                  accessToken: authState.session!.accessToken,
-                                  listingId: widget.listingId,
-                                  shouldFavorite: !isFavorited,
-                                );
-                                if (!mounted) {
-                                  return;
-                                }
-                                ref.invalidate(favoritesProvider);
-                              } finally {
-                                if (mounted) {
-                                  setState(() => _favoriteBusy = false);
-                                }
-                              }
-                            },
-                      icon: Icon(
-                          isFavorited ? Icons.favorite : Icons.favorite_border,
-                          color: isFavorited ? Colors.red : null),
-                    );
-                  },
-                  orElse: () => const SizedBox.shrink(),
-                ) ??
-                const SizedBox.shrink(),
+            _ListingFavoriteAction(
+              listingId: widget.listingId,
+              accessToken: authState.session!.accessToken,
+              favoriteBusy: _favoriteBusy,
+              onBusyChanged: (value) {
+                if (mounted) {
+                  setState(() => _favoriteBusy = value);
+                }
+              },
+            ),
         ],
       ),
       body: detailAsync.when(
@@ -245,6 +218,58 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
           : context.tr('No', 'Нет');
     }
     return attribute.textValue ?? '-';
+  }
+}
+
+class _ListingFavoriteAction extends ConsumerWidget {
+  const _ListingFavoriteAction({
+    required this.listingId,
+    required this.accessToken,
+    required this.favoriteBusy,
+    required this.onBusyChanged,
+  });
+
+  final String listingId;
+  final String accessToken;
+  final bool favoriteBusy;
+  final ValueChanged<bool> onBusyChanged;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final favoritesAsync = ref.watch(favoritesProvider);
+    return favoritesAsync.maybeWhen(
+          data: (page) {
+            final isFavorited =
+                page.items.any((item) => item.listingPublicId == listingId);
+            return IconButton(
+              onPressed: favoriteBusy
+                  ? null
+                  : () async {
+                      final repository = ref.read(listingsRepositoryProvider);
+                      onBusyChanged(true);
+                      try {
+                        await repository.toggleFavorite(
+                          accessToken: accessToken,
+                          listingId: listingId,
+                          shouldFavorite: !isFavorited,
+                        );
+                        if (!context.mounted) {
+                          return;
+                        }
+                        ref.invalidate(favoritesProvider);
+                      } finally {
+                        onBusyChanged(false);
+                      }
+                    },
+              icon: Icon(
+                isFavorited ? Icons.favorite : Icons.favorite_border,
+                color: isFavorited ? Colors.red : null,
+              ),
+            );
+          },
+          orElse: () => const SizedBox.shrink(),
+        ) ??
+        const SizedBox.shrink();
   }
 }
 

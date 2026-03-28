@@ -36,7 +36,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget build(BuildContext context) {
     final listingsAsync = ref.watch(homeListingsProvider);
     final filters = ref.watch(homeListingFiltersProvider);
-    final authState = ref.watch(authControllerProvider);
+    final isAuthenticated = ref.watch(
+      authControllerProvider.select((state) => state.isAuthenticated),
+    );
 
     return MarketplaceShellScaffold(
       currentIndex: 0,
@@ -66,7 +68,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 value: 'price_desc',
                 child:
                     Text(context.tr('Price descending', 'Цена по убыванию'))),
-            if (!authState.isAuthenticated)
+            if (!isAuthenticated)
               PopupMenuItem(
                   value: 'login', child: Text(context.tr('Sign in', 'Войти'))),
           ],

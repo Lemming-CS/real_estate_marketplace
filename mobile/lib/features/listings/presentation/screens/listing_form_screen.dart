@@ -56,50 +56,25 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
   AutovalidateMode _autovalidateMode = AutovalidateMode.disabled;
   final List<File> _selectedImages = [];
   final List<ListingMedia> _existingMedia = [];
+  late final Listenable _formInputsListenable;
+  late final Listenable _locationInputsListenable;
 
   bool get isEditing => widget.listingId != null;
 
   @override
   void initState() {
     super.initState();
-    for (final controller in [
-      _titleController,
-      _descriptionController,
-      _cityController,
-      _districtController,
-      _addressController,
-      _mapLabelController,
-      _latitudeController,
-      _longitudeController,
-      _roomsController,
-      _areaController,
-      _floorController,
-      _totalFloorsController,
-      _priceController,
-      _bathroomsController,
-    ]) {
+    _formInputsListenable = Listenable.merge(_textControllers);
+    _locationInputsListenable =
+        Listenable.merge([_latitudeController, _longitudeController]);
+    for (final controller in _textControllers) {
       controller.addListener(_handleFormChanged);
     }
   }
 
   @override
   void dispose() {
-    for (final controller in [
-      _titleController,
-      _descriptionController,
-      _cityController,
-      _districtController,
-      _addressController,
-      _mapLabelController,
-      _latitudeController,
-      _longitudeController,
-      _roomsController,
-      _areaController,
-      _floorController,
-      _totalFloorsController,
-      _priceController,
-      _bathroomsController,
-    ]) {
+    for (final controller in _textControllers) {
       controller.removeListener(_handleFormChanged);
     }
     _titleController.dispose();
@@ -118,6 +93,23 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
     _bathroomsController.dispose();
     super.dispose();
   }
+
+  List<TextEditingController> get _textControllers => [
+        _titleController,
+        _descriptionController,
+        _cityController,
+        _districtController,
+        _addressController,
+        _mapLabelController,
+        _latitudeController,
+        _longitudeController,
+        _roomsController,
+        _areaController,
+        _floorController,
+        _totalFloorsController,
+        _priceController,
+        _bathroomsController,
+      ];
 
   @override
   Widget build(BuildContext context) {
@@ -176,9 +168,6 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
     List<CategoryOption> categories, {
     List<ListingMedia> existingMedia = const [],
   }) {
-    final canSaveDraft = !_isSubmitting && _isFormLocallyValid(context);
-    final canPublish = canSaveDraft;
-
     return Form(
       key: _formKey,
       autovalidateMode: _autovalidateMode,
@@ -369,16 +358,21 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: 8),
-          MapPreview(
-            latitude: double.tryParse(_latitudeController.text),
-            longitude: double.tryParse(_longitudeController.text),
-            interactive: true,
-            onTap: (latitude, longitude) {
-              setState(() {
-                _latitudeController.text = latitude.toStringAsFixed(6);
-                _longitudeController.text = longitude.toStringAsFixed(6);
-                _submitError = null;
-              });
+          ListenableBuilder(
+            listenable: _locationInputsListenable,
+            builder: (context, child) {
+              return MapPreview(
+                latitude: double.tryParse(_latitudeController.text),
+                longitude: double.tryParse(_longitudeController.text),
+                interactive: true,
+                onTap: (latitude, longitude) {
+                  setState(() {
+                    _latitudeController.text = latitude.toStringAsFixed(6);
+                    _longitudeController.text = longitude.toStringAsFixed(6);
+                    _submitError = null;
+                  });
+                },
+              );
             },
           ),
           const SizedBox(height: 12),
@@ -758,37 +752,45 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
             ),
           ),
           const SizedBox(height: 20),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: canSaveDraft
-                      ? () => _submit(
-                            authState: authState,
-                            categories: categories,
-                            publishNow: false,
-                          )
-                      : null,
-                  child: Text(_isSubmitting
-                      ? context.tr('Saving...', 'Сохраняем...')
-                      : context.tr('Save draft', 'Сохранить черновик')),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: FilledButton(
-                  onPressed: canPublish
-                      ? () => _submit(
-                            authState: authState,
-                            categories: categories,
-                            publishNow: true,
-                          )
-                      : null,
-                  child: Text(context.tr(
-                      'Save and publish', 'Сохранить и опубликовать')),
-                ),
-              ),
-            ],
+          ListenableBuilder(
+            listenable: _formInputsListenable,
+            builder: (context, child) {
+              final canSaveDraft =
+                  !_isSubmitting && _isFormLocallyValid(context);
+              final canPublish = canSaveDraft;
+              return Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: canSaveDraft
+                          ? () => _submit(
+                                authState: authState,
+                                categories: categories,
+                                publishNow: false,
+                              )
+                          : null,
+                      child: Text(_isSubmitting
+                          ? context.tr('Saving...', 'Сохраняем...')
+                          : context.tr('Save draft', 'Сохранить черновик')),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: canPublish
+                          ? () => _submit(
+                                authState: authState,
+                                categories: categories,
+                                publishNow: true,
+                              )
+                          : null,
+                      child: Text(context.tr(
+                          'Save and publish', 'Сохранить и опубликовать')),
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
         ],
       ),
@@ -1158,7 +1160,7 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
   }
 
   void _handleFormChanged() {
-    if (!mounted || _isPrefilling) {
+    if (!mounted || _isPrefilling || _submitError == null) {
       return;
     }
     setState(() {

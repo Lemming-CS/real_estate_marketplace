@@ -97,106 +97,117 @@ class PublicUserListingsScreen extends ConsumerWidget {
             );
           }
 
-          return ListView(
+          return ListView.builder(
             padding: const EdgeInsets.all(16),
-            children: [
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        context.tr(
-                          'Only active public listings are shown here.',
-                          'Здесь показываются только активные публичные объявления.',
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: [
-                            ChoiceChip(
-                              label: Text(context.tr('All', 'Все')),
-                              selected: filters.purpose == null &&
-                                  filters.propertyType == null,
-                              onSelected: (_) {
-                                ref
-                                    .read(
-                                        publicUserListingFiltersProvider(userId)
-                                            .notifier)
-                                    .state = filters.copyWith(
-                                  clearPurpose: true,
-                                  clearPropertyType: true,
-                                );
-                              },
+            itemCount: page.items.length + 1,
+            itemBuilder: (context, index) {
+              if (index == 0) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            context.tr(
+                              'Only active public listings are shown here.',
+                              'Здесь показываются только активные публичные объявления.',
                             ),
-                            const SizedBox(width: 8),
-                            ChoiceChip(
-                              label: Text(context.tr('Rent', 'Аренда')),
-                              selected: filters.purpose == 'rent',
-                              onSelected: (_) {
-                                ref
-                                    .read(
-                                        publicUserListingFiltersProvider(userId)
-                                            .notifier)
-                                    .state = filters.copyWith(purpose: 'rent');
-                              },
-                            ),
-                            const SizedBox(width: 8),
-                            ChoiceChip(
-                              label: Text(context.tr('Sale', 'Продажа')),
-                              selected: filters.purpose == 'sale',
-                              onSelected: (_) {
-                                ref
-                                    .read(
-                                        publicUserListingFiltersProvider(userId)
-                                            .notifier)
-                                    .state = filters.copyWith(purpose: 'sale');
-                              },
-                            ),
-                            const SizedBox(width: 8),
-                            ChoiceChip(
-                              label: Text(context.tr('Apartments', 'Квартиры')),
-                              selected: filters.propertyType == 'apartment',
-                              onSelected: (_) {
-                                ref
+                          ),
+                          const SizedBox(height: 12),
+                          SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              children: [
+                                ChoiceChip(
+                                  label: Text(context.tr('All', 'Все')),
+                                  selected: filters.purpose == null &&
+                                      filters.propertyType == null,
+                                  onSelected: (_) {
+                                    ref
                                         .read(publicUserListingFiltersProvider(
                                                 userId)
                                             .notifier)
-                                        .state =
-                                    filters.copyWith(propertyType: 'apartment');
-                              },
-                            ),
-                            const SizedBox(width: 8),
-                            ChoiceChip(
-                              label: Text(context.tr('Houses', 'Дома')),
-                              selected: filters.propertyType == 'house',
-                              onSelected: (_) {
-                                ref
+                                        .state = filters.copyWith(
+                                      clearPurpose: true,
+                                      clearPropertyType: true,
+                                    );
+                                  },
+                                ),
+                                const SizedBox(width: 8),
+                                ChoiceChip(
+                                  label: Text(context.tr('Rent', 'Аренда')),
+                                  selected: filters.purpose == 'rent',
+                                  onSelected: (_) {
+                                    ref
                                         .read(publicUserListingFiltersProvider(
                                                 userId)
                                             .notifier)
-                                        .state =
-                                    filters.copyWith(propertyType: 'house');
-                              },
+                                        .state = filters.copyWith(
+                                      purpose: 'rent',
+                                    );
+                                  },
+                                ),
+                                const SizedBox(width: 8),
+                                ChoiceChip(
+                                  label: Text(context.tr('Sale', 'Продажа')),
+                                  selected: filters.purpose == 'sale',
+                                  onSelected: (_) {
+                                    ref
+                                        .read(publicUserListingFiltersProvider(
+                                                userId)
+                                            .notifier)
+                                        .state = filters.copyWith(
+                                      purpose: 'sale',
+                                    );
+                                  },
+                                ),
+                                const SizedBox(width: 8),
+                                ChoiceChip(
+                                  label: Text(
+                                      context.tr('Apartments', 'Квартиры')),
+                                  selected: filters.propertyType == 'apartment',
+                                  onSelected: (_) {
+                                    ref
+                                        .read(publicUserListingFiltersProvider(
+                                                userId)
+                                            .notifier)
+                                        .state = filters.copyWith(
+                                      propertyType: 'apartment',
+                                    );
+                                  },
+                                ),
+                                const SizedBox(width: 8),
+                                ChoiceChip(
+                                  label: Text(context.tr('Houses', 'Дома')),
+                                  selected: filters.propertyType == 'house',
+                                  onSelected: (_) {
+                                    ref
+                                        .read(publicUserListingFiltersProvider(
+                                                userId)
+                                            .notifier)
+                                        .state = filters.copyWith(
+                                      propertyType: 'house',
+                                    );
+                                  },
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              ...page.items.map(
-                (listing) => ListingCard(
-                  listing: listing,
-                  onTap: () => context.push('/listing/${listing.publicId}'),
-                ),
-              ),
-            ],
+                );
+              }
+              final listing = page.items[index - 1];
+              return ListingCard(
+                listing: listing,
+                onTap: () => context.push('/listing/${listing.publicId}'),
+              );
+            },
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),

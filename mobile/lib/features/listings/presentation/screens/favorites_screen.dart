@@ -34,53 +34,56 @@ class FavoritesScreen extends ConsumerWidget {
                 child: Text(
                     context.tr('No favorites yet.', 'Пока нет избранного.')));
           }
-          return ListView(
+          return ListView.builder(
             padding: const EdgeInsets.all(16),
-            children: [
-              Card(
-                child: ListTile(
-                  leading: const Icon(Icons.favorite),
-                  title: Text(
-                      context.tr('Saved favorites', 'Сохраненные избранные')),
-                  trailing: Text('${page.meta.totalItems}'),
-                ),
-              ),
-              const SizedBox(height: 12),
-              ...page.items.map((item) {
-                if (!item.isAvailable || item.listing == null) {
-                  return Card(
+            itemCount: page.items.length + 1,
+            itemBuilder: (context, index) {
+              if (index == 0) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Card(
                     child: ListTile(
+                      leading: const Icon(Icons.favorite),
                       title: Text(context.tr(
-                          'Unavailable listing', 'Объявление недоступно')),
-                      subtitle: Text(item.unavailableReason ??
-                          context.tr('This listing is no longer public.',
-                              'Это объявление больше не публично.')),
+                          'Saved favorites', 'Сохраненные избранные')),
+                      trailing: Text('${page.meta.totalItems}'),
                     ),
-                  );
-                }
-                return ListingCard(
-                  listing: item.listing!,
-                  onTap: () =>
-                      context.push('/listing/${item.listing!.publicId}'),
-                  trailing: IconButton(
-                    onPressed: () async {
-                      final token = authState.session!.accessToken;
-                      final repository = ref.read(listingsRepositoryProvider);
-                      await repository.toggleFavorite(
-                        accessToken: token,
-                        listingId: item.listing!.publicId,
-                        shouldFavorite: false,
-                      );
-                      if (!context.mounted) {
-                        return;
-                      }
-                      ref.invalidate(favoritesProvider);
-                    },
-                    icon: const Icon(Icons.favorite, color: Colors.red),
                   ),
                 );
-              }),
-            ],
+              }
+              final item = page.items[index - 1];
+              if (!item.isAvailable || item.listing == null) {
+                return Card(
+                  child: ListTile(
+                    title: Text(context.tr(
+                        'Unavailable listing', 'Объявление недоступно')),
+                    subtitle: Text(item.unavailableReason ??
+                        context.tr('This listing is no longer public.',
+                            'Это объявление больше не публично.')),
+                  ),
+                );
+              }
+              return ListingCard(
+                listing: item.listing!,
+                onTap: () => context.push('/listing/${item.listing!.publicId}'),
+                trailing: IconButton(
+                  onPressed: () async {
+                    final token = authState.session!.accessToken;
+                    final repository = ref.read(listingsRepositoryProvider);
+                    await repository.toggleFavorite(
+                      accessToken: token,
+                      listingId: item.listing!.publicId,
+                      shouldFavorite: false,
+                    );
+                    if (!context.mounted) {
+                      return;
+                    }
+                    ref.invalidate(favoritesProvider);
+                  },
+                  icon: const Icon(Icons.favorite, color: Colors.red),
+                ),
+              );
+            },
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),

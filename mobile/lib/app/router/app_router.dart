@@ -14,8 +14,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authControllerProvider);
-
+  final isAuthenticated = ref.watch(
+    authControllerProvider.select((state) => state.isAuthenticated),
+  );
   bool requiresAuth(String location) {
     return location == '/favorites' ||
         location == '/my-listings' ||
@@ -28,15 +29,20 @@ final routerProvider = Provider<GoRouter>((ref) {
     initialLocation: '/',
     redirect: (context, state) {
       final location = state.matchedLocation;
-      final isAuthenticated = authState.isAuthenticated;
       final authPages = {'/login', '/register'};
+
+      if (location == '/forgot-password') {
+        return null;
+      }
 
       if (!isAuthenticated && requiresAuth(location)) {
         return '/login';
       }
+
       if (isAuthenticated && authPages.contains(location)) {
         return '/';
       }
+
       return null;
     },
     routes: <GoRoute>[

@@ -24,23 +24,50 @@ class NetworkMediaImage extends StatelessWidget {
     final baseOrigin =
         '${uri.scheme}://${uri.host}${uri.hasPort ? ':${uri.port}' : ''}';
     final imageUrl = '$baseOrigin/api/v1${ApiEndpoints.media(assetKey)}';
-    final image = Image.network(
-      imageUrl,
-      fit: fit,
-      height: height,
-      width: width,
-      errorBuilder: (context, error, stackTrace) => _placeholder(context),
-      loadingBuilder: (context, child, loadingProgress) {
-        if (loadingProgress == null) {
-          return child;
-        }
-        return _placeholder(context, loading: true);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
+        final resolvedWidth = _resolveDimension(width, constraints.maxWidth);
+        final resolvedHeight = _resolveDimension(height, constraints.maxHeight);
+        final cacheWidth = resolvedWidth == null
+            ? null
+            : (resolvedWidth * devicePixelRatio).round();
+        final cacheHeight = resolvedHeight == null
+            ? null
+            : (resolvedHeight * devicePixelRatio).round();
+
+        final image = Image.network(
+          imageUrl,
+          fit: fit,
+          height: height,
+          width: width,
+          cacheWidth: cacheWidth,
+          cacheHeight: cacheHeight,
+          filterQuality: FilterQuality.medium,
+          errorBuilder: (context, error, stackTrace) => _placeholder(context),
+          loadingBuilder: (context, child, loadingProgress) {
+            if (loadingProgress == null) {
+              return child;
+            }
+            return _placeholder(context, loading: true);
+          },
+        );
+        final content = borderRadius == null
+            ? image
+            : ClipRRect(borderRadius: borderRadius!, child: image);
+        return RepaintBoundary(child: content);
       },
     );
-    if (borderRadius == null) {
-      return image;
+  }
+
+  double? _resolveDimension(double? preferred, double maxConstraint) {
+    if (preferred != null && preferred.isFinite) {
+      return preferred;
     }
-    return ClipRRect(borderRadius: borderRadius!, child: image);
+    if (maxConstraint.isFinite && maxConstraint > 0) {
+      return maxConstraint;
+    }
+    return null;
   }
 
   Widget _placeholder(BuildContext context, {bool loading = false}) {
