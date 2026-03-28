@@ -103,23 +103,26 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         if (!_formKey.currentState!.validate()) {
                           return;
                         }
-                        final success = await ref
-                            .read(authControllerProvider.notifier)
-                            .register(
-                              email: _emailController.text,
-                              username: _usernameController.text,
-                              fullName: _fullNameController.text,
-                              password: _passwordController.text,
-                              locale: _locale,
-                            );
-                        final session =
-                            ref.read(authControllerProvider).session;
-                        if (!context.mounted || !success || session == null) {
+                        final authController =
+                            ref.read(authControllerProvider.notifier);
+                        final localeController =
+                            ref.read(appLocaleControllerProvider.notifier);
+                        final success = await authController.register(
+                          email: _emailController.text,
+                          username: _usernameController.text,
+                          fullName: _fullNameController.text,
+                          password: _passwordController.text,
+                          locale: _locale,
+                        );
+                        if (!context.mounted || !success) {
                           return;
                         }
-                        await ref
-                            .read(appLocaleControllerProvider.notifier)
-                            .setLocale(session.user.locale);
+                        final session =
+                            ref.read(authControllerProvider).session;
+                        if (session == null) {
+                          return;
+                        }
+                        await localeController.setLocale(session.user.locale);
                         if (!context.mounted) {
                           return;
                         }

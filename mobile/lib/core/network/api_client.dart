@@ -1,7 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
+import 'package:mime/mime.dart';
 
 class ApiException implements Exception {
   const ApiException(this.message, {this.code, this.statusCode});
@@ -61,6 +64,20 @@ class ApiClient {
     return _decodeMap(response);
   }
 
+  Future<List<dynamic>> postJsonList(
+    String path, {
+    String? accessToken,
+    Map<String, dynamic>? body,
+    Map<String, String?> query = const {},
+  }) async {
+    final response = await _client.post(
+      _uri(path, query),
+      headers: _headers(accessToken: accessToken),
+      body: jsonEncode(body ?? <String, dynamic>{}),
+    );
+    return _decodeList(response);
+  }
+
   Future<Map<String, dynamic>> patchJson(
     String path, {
     String? accessToken,
@@ -73,6 +90,20 @@ class ApiClient {
       body: jsonEncode(body ?? <String, dynamic>{}),
     );
     return _decodeMap(response);
+  }
+
+  Future<List<dynamic>> patchJsonList(
+    String path, {
+    String? accessToken,
+    Map<String, dynamic>? body,
+    Map<String, String?> query = const {},
+  }) async {
+    final response = await _client.patch(
+      _uri(path, query),
+      headers: _headers(accessToken: accessToken),
+      body: jsonEncode(body ?? <String, dynamic>{}),
+    );
+    return _decodeList(response);
   }
 
   Future<Map<String, dynamic>> deleteJson(
@@ -97,8 +128,36 @@ class ApiClient {
       ..headers.addAll(_multipartHeaders(accessToken: accessToken))
       ..fields.addAll(fields);
     for (final file in files) {
-      request.files
-          .add(await http.MultipartFile.fromPath(fileField, file.path));
+      request.files.add(
+        await http.MultipartFile.fromPath(
+          fileField,
+          file.path,
+          contentType: _contentTypeForFile(file.path),
+        ),
+      );
+    }
+    final streamed = await request.send();
+    return _decodeMap(await http.Response.fromStream(streamed));
+  }
+
+  Future<Map<String, dynamic>> putMultipart(
+    String path, {
+    required List<File> files,
+    String? accessToken,
+    String fileField = 'upload',
+    Map<String, String> fields = const {},
+  }) async {
+    final request = http.MultipartRequest('PUT', _uri(path, const {}))
+      ..headers.addAll(_multipartHeaders(accessToken: accessToken))
+      ..fields.addAll(fields);
+    for (final file in files) {
+      request.files.add(
+        await http.MultipartFile.fromPath(
+          fileField,
+          file.path,
+          contentType: _contentTypeForFile(file.path),
+        ),
+      );
     }
     final streamed = await request.send();
     return _decodeMap(await http.Response.fromStream(streamed));
@@ -154,6 +213,9 @@ class ApiClient {
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return body;
     }
+    debugPrint(
+      'HTTP ${response.statusCode} ${response.request?.url}: ${response.body}',
+    );
     if (body is Map<String, dynamic> && body['error'] is Map<String, dynamic>) {
       final error = body['error'] as Map<String, dynamic>;
       throw ApiException(
@@ -162,9 +224,27 @@ class ApiClient {
         statusCode: response.statusCode,
       );
     }
+    if (body is Map<String, dynamic>) {
+      throw ApiException(
+        'Request failed with status ${response.statusCode}: ${jsonEncode(body)}',
+        statusCode: response.statusCode,
+      );
+    }
     throw ApiException(
       'Request failed with status ${response.statusCode}.',
       statusCode: response.statusCode,
     );
+  }
+
+  MediaType? _contentTypeForFile(String path) {
+    final mimeType = lookupMimeType(path);
+    if (mimeType == null) {
+      return null;
+    }
+    final parts = mimeType.split('/');
+    if (parts.length != 2) {
+      return null;
+    }
+    return MediaType(parts[0], parts[1]);
   }
 }

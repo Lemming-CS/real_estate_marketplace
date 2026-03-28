@@ -143,6 +143,60 @@ class ListingsRepository {
     }
   }
 
+  Future<ListingMedia> replaceListingImage({
+    required String accessToken,
+    required String listingId,
+    required String mediaId,
+    required File image,
+  }) async {
+    final json = await _client.putMultipart(
+      ApiEndpoints.listingMediaItem(listingId, mediaId),
+      accessToken: accessToken,
+      files: [image],
+    );
+    return ListingMedia.fromJson(json);
+  }
+
+  Future<void> deleteListingImage({
+    required String accessToken,
+    required String listingId,
+    required String mediaId,
+  }) async {
+    await _client.deleteJson(
+      ApiEndpoints.listingMediaItem(listingId, mediaId),
+      accessToken: accessToken,
+    );
+  }
+
+  Future<List<ListingMedia>> reorderListingMedia({
+    required String accessToken,
+    required String listingId,
+    required List<String> mediaIds,
+  }) async {
+    final json = await _client.patchJsonList(
+      ApiEndpoints.listingMediaOrder(listingId),
+      accessToken: accessToken,
+      body: {'media_public_ids': mediaIds},
+    );
+    return json
+        .map((item) => ListingMedia.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<List<ListingMedia>> setPrimaryListingMedia({
+    required String accessToken,
+    required String listingId,
+    required String mediaId,
+  }) async {
+    final json = await _client.postJsonList(
+      ApiEndpoints.listingMediaPrimary(listingId, mediaId),
+      accessToken: accessToken,
+    );
+    return json
+        .map((item) => ListingMedia.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
   Future<void> publishListing({
     required String accessToken,
     required String listingId,
@@ -175,7 +229,10 @@ class ListingsRepository {
 
   Map<String, dynamic> _listingBody(ListingFormData data) {
     final attributeValues = <Map<String, dynamic>>[
-      {'attribute_code': 'bathrooms', 'numeric_value': data.bathrooms.trim()},
+      {
+        'attribute_code': 'bathrooms',
+        'numeric_value': double.parse(data.bathrooms.trim()),
+      },
     ];
     if (data.propertyType == 'apartment') {
       attributeValues.add(
@@ -188,16 +245,16 @@ class ListingsRepository {
       'description': data.description.trim(),
       'purpose': data.purpose,
       'property_type': data.propertyType,
-      'price_amount': data.priceAmount.trim(),
+      'price_amount': double.parse(data.priceAmount.trim()),
       'currency_code': data.currencyCode.trim(),
       'city': data.city.trim(),
       'district': data.district.trim().isEmpty ? null : data.district.trim(),
       'address_text': data.addressText.trim(),
       'map_label': data.mapLabel.trim().isEmpty ? null : data.mapLabel.trim(),
-      'latitude': data.latitude.trim(),
-      'longitude': data.longitude.trim(),
+      'latitude': double.parse(data.latitude.trim()),
+      'longitude': double.parse(data.longitude.trim()),
       'room_count': int.parse(data.roomCount.trim()),
-      'area_sqm': data.areaSqm.trim(),
+      'area_sqm': double.parse(data.areaSqm.trim()),
       'floor': data.floor.trim().isEmpty ? null : int.parse(data.floor.trim()),
       'total_floors': data.totalFloors.trim().isEmpty
           ? null

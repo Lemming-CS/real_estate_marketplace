@@ -34,6 +34,10 @@ class MarketplaceShellScaffold extends StatelessWidget {
             '/create-listing',
             '/profile'
           ];
+          if (index == 3) {
+            context.push(paths[index]);
+            return;
+          }
           context.go(paths[index]);
         },
         destinations: [

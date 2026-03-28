@@ -1,3 +1,5 @@
+import 'package:electronics_marketplace_mobile/core/utils/json_parsers.dart';
+
 class PaginationMeta {
   const PaginationMeta({
     required this.page,
@@ -12,10 +14,10 @@ class PaginationMeta {
   final int totalPages;
 
   factory PaginationMeta.fromJson(Map<String, dynamic> json) => PaginationMeta(
-        page: json['page'] as int? ?? 1,
-        pageSize: json['page_size'] as int? ?? 20,
-        totalItems: json['total_items'] as int? ?? 0,
-        totalPages: json['total_pages'] as int? ?? 0,
+        page: parseInt(json['page']) ?? 1,
+        pageSize: parseInt(json['page_size']) ?? 20,
+        totalItems: parseInt(json['total_items']) ?? 0,
+        totalPages: parseInt(json['total_pages']) ?? 0,
       );
 }
 
@@ -85,9 +87,9 @@ class ListingMedia {
         mediaType: json['media_type'] as String,
         assetKey: json['asset_key'] as String,
         mimeType: json['mime_type'] as String,
-        sortOrder: json['sort_order'] as int? ?? 0,
+        sortOrder: parseInt(json['sort_order']) ?? 0,
         isPrimary: json['is_primary'] as bool? ?? false,
-        fileSizeBytes: json['file_size_bytes'] as int?,
+        fileSizeBytes: parseInt(json['file_size_bytes']),
       );
 }
 
@@ -108,7 +110,7 @@ class ListingAttributeValue {
   final String dataType;
   final String? unit;
   final String? textValue;
-  final num? numericValue;
+  final double? numericValue;
   final bool? booleanValue;
   final String? optionValue;
 
@@ -119,7 +121,7 @@ class ListingAttributeValue {
         dataType: json['data_type'] as String,
         unit: json['unit'] as String?,
         textValue: json['text_value'] as String?,
-        numericValue: json['numeric_value'] as num?,
+        numericValue: parseDouble(json['numeric_value']),
         booleanValue: json['boolean_value'] as bool?,
         optionValue: json['option_value'] as String?,
       );
@@ -149,7 +151,7 @@ class OwnerCard {
         username: json['username'] as String,
         fullName: json['full_name'] as String,
         createdAt: DateTime.parse(json['created_at'] as String),
-        activeListingCount: json['active_listing_count'] as int? ?? 0,
+        activeListingCount: parseInt(json['active_listing_count']) ?? 0,
         bio: json['bio'] as String?,
         profileImagePath: json['profile_image_path'] as String?,
       );
@@ -207,18 +209,18 @@ class ListingSummary {
         title: json['title'] as String,
         purpose: json['purpose'] as String,
         propertyType: json['property_type'] as String,
-        priceAmount: json['price_amount'].toString(),
+        priceAmount: (parseDouble(json['price_amount']) ?? 0).toString(),
         currencyCode: json['currency_code'] as String,
         status: json['status'] as String,
         city: json['city'] as String,
         district: json['district'] as String?,
         mapLabel: json['map_label'] as String?,
-        latitude: (json['latitude'] as num).toDouble(),
-        longitude: (json['longitude'] as num).toDouble(),
-        roomCount: json['room_count'] as int? ?? 0,
-        areaSqm: json['area_sqm'].toString(),
-        floor: json['floor'] as int?,
-        totalFloors: json['total_floors'] as int?,
+        latitude: parseDouble(json['latitude']) ?? 0,
+        longitude: parseDouble(json['longitude']) ?? 0,
+        roomCount: parseInt(json['room_count']) ?? 0,
+        areaSqm: (parseDouble(json['area_sqm']) ?? 0).toString(),
+        floor: parseInt(json['floor']),
+        totalFloors: parseInt(json['total_floors']),
         furnished: json['furnished'] as bool?,
         category: ListingCategorySummary.fromJson(
             json['category'] as Map<String, dynamic>),
@@ -272,18 +274,18 @@ class ListingDetail extends ListingSummary {
         title: json['title'] as String,
         purpose: json['purpose'] as String,
         propertyType: json['property_type'] as String,
-        priceAmount: json['price_amount'].toString(),
+        priceAmount: (parseDouble(json['price_amount']) ?? 0).toString(),
         currencyCode: json['currency_code'] as String,
         status: json['status'] as String,
         city: json['city'] as String,
         district: json['district'] as String?,
         mapLabel: json['map_label'] as String?,
-        latitude: (json['latitude'] as num).toDouble(),
-        longitude: (json['longitude'] as num).toDouble(),
-        roomCount: json['room_count'] as int? ?? 0,
-        areaSqm: json['area_sqm'].toString(),
-        floor: json['floor'] as int?,
-        totalFloors: json['total_floors'] as int?,
+        latitude: parseDouble(json['latitude']) ?? 0,
+        longitude: parseDouble(json['longitude']) ?? 0,
+        roomCount: parseInt(json['room_count']) ?? 0,
+        areaSqm: (parseDouble(json['area_sqm']) ?? 0).toString(),
+        floor: parseInt(json['floor']),
+        totalFloors: parseInt(json['total_floors']),
         furnished: json['furnished'] as bool?,
         category: ListingCategorySummary.fromJson(
             json['category'] as Map<String, dynamic>),
@@ -350,8 +352,8 @@ class PublicUserProfile {
         publicId: json['public_id'] as String,
         username: json['username'] as String,
         fullName: json['full_name'] as String,
-        activeListingCount: json['active_listing_count'] as int? ?? 0,
-        publishedListingCount: json['published_listing_count'] as int? ?? 0,
+        activeListingCount: parseInt(json['active_listing_count']) ?? 0,
+        publishedListingCount: parseInt(json['published_listing_count']) ?? 0,
         createdAt: DateTime.parse(json['created_at'] as String),
         bio: json['bio'] as String?,
         profileImagePath: json['profile_image_path'] as String?,
@@ -420,7 +422,7 @@ class OwnerListing {
         publicId: json['public_id'] as String,
         title: json['title'] as String,
         status: json['status'] as String,
-        priceAmount: json['price_amount'].toString(),
+        priceAmount: (parseDouble(json['price_amount']) ?? 0).toString(),
         currencyCode: json['currency_code'] as String,
         city: json['city'] as String,
       );

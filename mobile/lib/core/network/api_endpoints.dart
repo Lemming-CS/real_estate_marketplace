@@ -2,6 +2,7 @@ class ApiEndpoints {
   static const authLogin = '/auth/login';
   static const authRegister = '/auth/register';
   static const authForgotPassword = '/auth/forgot-password';
+  static const authResetPassword = '/auth/reset-password';
   static const authMe = '/auth/me';
   static const authLogout = '/auth/logout';
 
@@ -14,6 +15,12 @@ class ApiEndpoints {
   static String publishListing(String listingId) =>
       '/listings/$listingId/publish';
   static String listingMedia(String listingId) => '/listings/$listingId/media';
+  static String listingMediaItem(String listingId, String mediaId) =>
+      '/listings/$listingId/media/$mediaId';
+  static String listingMediaPrimary(String listingId, String mediaId) =>
+      '/listings/$listingId/media/$mediaId/primary';
+  static String listingMediaOrder(String listingId) =>
+      '/listings/$listingId/media/order';
 
   static const favorites = '/favorites';
   static String favorite(String listingId) => '/favorites/$listingId';

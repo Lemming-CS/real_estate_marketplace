@@ -202,52 +202,77 @@ def update_listing(
     _ensure_user_can_manage_listings(actor)
 
     if listing.status == ListingStatus.SOLD:
-        raise AppError(status_code=409, code="listing_sold", message="Sold listings cannot be edited.")
+        raise AppError(
+            status_code=409,
+            code="listing_sold",
+            message="Sold listings cannot be edited.",
+        )
 
     updates = payload.model_dump(exclude_unset=True)
     category = listing.category
     category_changed = False
 
     if "category_public_id" in updates:
-        category = _get_active_category_or_404(session, category_public_id=updates["category_public_id"])
+        category = _get_active_category_or_404(
+            session,
+            category_public_id=payload.category_public_id,
+        )
         listing.category_id = category.id
         category_changed = True
+
     if "title" in updates:
-        listing.title = updates["title"].strip()
+        listing.title = payload.title.strip()
+
     if "description" in updates:
-        listing.description = updates["description"].strip()
+        listing.description = payload.description.strip()
+
     if "purpose" in updates:
-        listing.purpose = updates["purpose"]
+        listing.purpose = payload.purpose
+
     if "property_type" in updates:
-        listing.property_type = updates["property_type"]
+        listing.property_type = payload.property_type
+
     if "price_amount" in updates:
-        listing.price_amount = updates["price_amount"]
+        listing.price_amount = payload.price_amount
+
     if "currency_code" in updates:
-        listing.currency_code = updates["currency_code"].upper()
+        listing.currency_code = payload.currency_code.upper()
+
     if "item_condition" in updates:
-        listing.item_condition = updates["item_condition"]
+        listing.item_condition = payload.item_condition
+
     if "city" in updates:
-        listing.city = updates["city"].strip()
+        listing.city = payload.city.strip()
+
     if "district" in updates:
-        listing.district = updates["district"].strip() if updates["district"] else None
+        listing.district = payload.district.strip() if payload.district else None
+
     if "address_text" in updates:
-        listing.address_text = updates["address_text"].strip()
+        listing.address_text = payload.address_text.strip()
+
     if "map_label" in updates:
-        listing.map_label = updates["map_label"].strip() if updates["map_label"] else None
+        listing.map_label = payload.map_label.strip() if payload.map_label else None
+
     if "latitude" in updates:
-        listing.latitude = updates["latitude"]
+        listing.latitude = payload.latitude
+
     if "longitude" in updates:
-        listing.longitude = updates["longitude"]
+        listing.longitude = payload.longitude
+
     if "room_count" in updates:
-        listing.room_count = updates["room_count"]
+        listing.room_count = payload.room_count
+
     if "area_sqm" in updates:
-        listing.area_sqm = updates["area_sqm"]
+        listing.area_sqm = payload.area_sqm
+
     if "floor" in updates:
-        listing.floor = updates["floor"]
+        listing.floor = payload.floor
+
     if "total_floors" in updates:
-        listing.total_floors = updates["total_floors"]
+        listing.total_floors = payload.total_floors
+
     if "furnished" in updates:
-        listing.furnished = updates["furnished"]
+        listing.furnished = payload.furnished
 
     if category_changed and "attribute_values" not in updates:
         raise AppError(
@@ -258,9 +283,10 @@ def update_listing(
 
     if "attribute_values" in updates:
         _replace_attribute_values(
+            session,
             listing=listing,
             category=category,
-            attribute_inputs=updates["attribute_values"],
+            attribute_inputs=payload.attribute_values or [],
         )
 
     session.flush()
@@ -272,7 +298,6 @@ def update_listing(
         promotion_state=_active_promotion_state_map(session, [listing.id], locale=locale).get(listing.id),
         include_exact_address=True,
     )
-
 
 def submit_listing_for_review(
     session: Session,
@@ -560,22 +585,6 @@ def delete_listing_media(
 
     active_media = _active_media(listing)
     media = _get_listing_media_or_404(listing=listing, media_public_id=media_public_id)
-    if listing.status in {ListingStatus.PUBLISHED, ListingStatus.PENDING_REVIEW, ListingStatus.INACTIVE} and len(active_media) == 1:
-        raise AppError(
-            status_code=409,
-            code="listing_requires_media",
-            message="This listing status requires at least one active media item.",
-        )
-    if media.media_type == MediaType.IMAGE and listing.status in {ListingStatus.PUBLISHED, ListingStatus.PENDING_REVIEW, ListingStatus.INACTIVE}:
-        remaining_images = [
-            item for item in active_media if item.public_id != media.public_id and item.media_type == MediaType.IMAGE
-        ]
-        if not remaining_images:
-            raise AppError(
-                status_code=409,
-                code="listing_requires_primary_image",
-                message="Published property listings must keep at least one image.",
-            )
 
     media.deleted_at = utcnow()
     delete_storage_key(settings=settings, storage_key=media.storage_key)
@@ -873,6 +882,7 @@ def _ensure_listing_write_access(session: Session, *, listing: Listing, actor: U
 
 
 def _replace_attribute_values(
+    session: Session,
     *,
     listing: Listing,
     category: Category,
@@ -880,6 +890,7 @@ def _replace_attribute_values(
 ) -> None:
     attribute_map = {attribute.code: attribute for attribute in category.attributes}
     provided_codes = [item.attribute_code for item in attribute_inputs]
+
     if len(provided_codes) != len(set(provided_codes)):
         raise AppError(
             status_code=400,
@@ -911,8 +922,11 @@ def _replace_attribute_values(
                 details={"attribute_code": attribute_input.attribute_code},
             )
         values.append(_build_attribute_value(attribute=attribute, attribute_input=attribute_input))
-    listing.attribute_values = values
 
+    listing.attribute_values.clear()
+    session.flush()
+
+    listing.attribute_values.extend(values)
 
 def _build_attribute_value(
     *,
@@ -992,19 +1006,7 @@ def _ensure_listing_publishable(listing: Listing) -> None:
 
 
 def _ensure_listing_has_media(listing: Listing) -> None:
-    media_items = _active_media(listing)
-    if not media_items:
-        raise AppError(
-            status_code=400,
-            code="listing_requires_media",
-            message="Listing must have at least one active media item.",
-        )
-    if not any(media.media_type == MediaType.IMAGE for media in media_items):
-        raise AppError(
-            status_code=400,
-            code="listing_requires_primary_image",
-            message="Property listings require at least one image.",
-        )
+    return None
 
 
 def _validate_listing_real_estate_shape(listing: Listing) -> None:

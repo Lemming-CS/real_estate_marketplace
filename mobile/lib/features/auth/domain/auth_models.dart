@@ -65,3 +65,19 @@ class AuthSession {
         'user': user.toJson(),
       };
 }
+
+class ForgotPasswordResult {
+  const ForgotPasswordResult({
+    required this.message,
+    this.debugResetToken,
+  });
+
+  final String message;
+  final String? debugResetToken;
+
+  factory ForgotPasswordResult.fromJson(Map<String, dynamic> json) =>
+      ForgotPasswordResult(
+        message: json['message'] as String? ?? 'Reset instructions generated.',
+        debugResetToken: json['debug_reset_token'] as String?,
+      );
+}

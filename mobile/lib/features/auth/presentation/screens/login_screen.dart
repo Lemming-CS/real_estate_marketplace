@@ -92,20 +92,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         if (!_formKey.currentState!.validate()) {
                           return;
                         }
-                        final success = await ref
-                            .read(authControllerProvider.notifier)
-                            .login(
-                              _emailController.text,
-                              _passwordController.text,
-                            );
-                        final session =
-                            ref.read(authControllerProvider).session;
-                        if (!context.mounted || !success || session == null) {
+                        final authController =
+                            ref.read(authControllerProvider.notifier);
+                        final localeController =
+                            ref.read(appLocaleControllerProvider.notifier);
+                        final success = await authController.login(
+                          _emailController.text,
+                          _passwordController.text,
+                        );
+                        if (!context.mounted || !success) {
                           return;
                         }
-                        await ref
-                            .read(appLocaleControllerProvider.notifier)
-                            .setLocale(session.user.locale);
+                        final session =
+                            ref.read(authControllerProvider).session;
+                        if (session == null) {
+                          return;
+                        }
+                        await localeController.setLocale(session.user.locale);
                         if (!context.mounted) {
                           return;
                         }

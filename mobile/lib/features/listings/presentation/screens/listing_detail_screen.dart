@@ -46,16 +46,18 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
                       onPressed: _favoriteBusy
                           ? null
                           : () async {
+                              final repository =
+                                  ref.read(listingsRepositoryProvider);
                               setState(() => _favoriteBusy = true);
                               try {
-                                await ref
-                                    .read(listingsRepositoryProvider)
-                                    .toggleFavorite(
-                                      accessToken:
-                                          authState.session!.accessToken,
-                                      listingId: widget.listingId,
-                                      shouldFavorite: !isFavorited,
-                                    );
+                                await repository.toggleFavorite(
+                                  accessToken: authState.session!.accessToken,
+                                  listingId: widget.listingId,
+                                  shouldFavorite: !isFavorited,
+                                );
+                                if (!mounted) {
+                                  return;
+                                }
                                 ref.invalidate(favoritesProvider);
                               } finally {
                                 if (mounted) {
@@ -97,6 +99,16 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
                     ?.copyWith(fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 8),
+              if (listing.isPromoted) ...[
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Chip(
+                    avatar: const Icon(Icons.workspace_premium, size: 18),
+                    label: Text(context.tr('Promoted', 'Продвигается')),
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
@@ -183,12 +195,15 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
                         listing.status == 'inactive')
                       FilledButton(
                         onPressed: () async {
-                          await ref
-                              .read(listingsRepositoryProvider)
-                              .publishListing(
-                                accessToken: authState.session!.accessToken,
-                                listingId: listing.publicId,
-                              );
+                          final repository =
+                              ref.read(listingsRepositoryProvider);
+                          await repository.publishListing(
+                            accessToken: authState.session!.accessToken,
+                            listingId: listing.publicId,
+                          );
+                          if (!mounted) {
+                            return;
+                          }
                           ref.invalidate(
                               listingDetailProvider(widget.listingId));
                           ref.invalidate(myListingsProvider);

@@ -38,12 +38,26 @@ class AuthRepository {
     return AuthSession.fromJson(json);
   }
 
-  Future<String> forgotPassword(String email) async {
+  Future<ForgotPasswordResult> forgotPassword(String email) async {
     final json = await _client.postJson(
       ApiEndpoints.authForgotPassword,
       body: {'email': email.trim()},
     );
-    return json['message'] as String? ?? 'Reset instructions generated.';
+    return ForgotPasswordResult.fromJson(json);
+  }
+
+  Future<String> resetPassword({
+    required String token,
+    required String newPassword,
+  }) async {
+    final json = await _client.postJson(
+      ApiEndpoints.authResetPassword,
+      body: {
+        'token': token.trim(),
+        'new_password': newPassword,
+      },
+    );
+    return json['message'] as String? ?? 'Password has been reset.';
   }
 
   Future<AuthUser> fetchCurrentUser(String accessToken) async {

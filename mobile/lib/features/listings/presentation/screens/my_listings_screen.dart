@@ -90,6 +90,9 @@ class MyListingsScreen extends ConsumerWidget {
                       await repository.reactivateListing(
                           accessToken: token, listingId: listing.publicId);
                     }
+                    if (!context.mounted) {
+                      return;
+                    }
                     ref.invalidate(myListingsProvider);
                     ref.invalidate(listingDetailProvider(listing.publicId));
                   },

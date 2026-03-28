@@ -16,10 +16,4 @@ fi
 cd "$PROJECT_DIR"
 flutter pub get
 
-APP_NAME="$(grep '^APP_NAME=' "$ENV_FILE" | cut -d '=' -f 2-)"
-API_BASE_URL="$(grep '^API_BASE_URL=' "$ENV_FILE" | cut -d '=' -f 2-)"
-
-flutter run \
-  --dart-define=APP_NAME="$APP_NAME" \
-  --dart-define=API_BASE_URL="$API_BASE_URL"
-
+flutter run

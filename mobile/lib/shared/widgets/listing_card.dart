@@ -27,23 +27,52 @@ class ListingCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (listing.primaryMedia != null)
-                NetworkMediaImage(
-                  assetKey: listing.primaryMedia!.assetKey,
-                  height: 180,
-                  width: double.infinity,
-                  borderRadius: BorderRadius.circular(16),
-                )
-              else
-                Container(
-                  height: 180,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade200,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: const Icon(Icons.home_work_outlined, size: 44),
-                ),
+              Stack(
+                children: [
+                  if (listing.primaryMedia != null)
+                    NetworkMediaImage(
+                      assetKey: listing.primaryMedia!.assetKey,
+                      height: 180,
+                      width: double.infinity,
+                      borderRadius: BorderRadius.circular(16),
+                    )
+                  else
+                    Container(
+                      height: 180,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: const Icon(Icons.home_work_outlined, size: 44),
+                    ),
+                  if (listing.isPromoted)
+                    Positioned(
+                      top: 12,
+                      left: 12,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.primaryContainer,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.workspace_premium, size: 16),
+                              const SizedBox(width: 6),
+                              Text(context.tr('Promoted', 'Продвигается')),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
               const SizedBox(height: 12),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,

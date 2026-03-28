@@ -14,12 +14,14 @@ class AuthState {
     this.isLoading = false,
     this.error,
     this.resetMessage,
+    this.debugResetToken,
   });
 
   final AuthSession? session;
   final bool isLoading;
   final String? error;
   final String? resetMessage;
+  final String? debugResetToken;
 
   bool get isAuthenticated => session != null;
 
@@ -28,9 +30,11 @@ class AuthState {
     bool? isLoading,
     String? error,
     String? resetMessage,
+    String? debugResetToken,
     bool clearSession = false,
     bool clearError = false,
     bool clearResetMessage = false,
+    bool clearDebugResetToken = false,
   }) {
     return AuthState(
       session: clearSession ? null : (session ?? this.session),
@@ -38,6 +42,9 @@ class AuthState {
       error: clearError ? null : (error ?? this.error),
       resetMessage:
           clearResetMessage ? null : (resetMessage ?? this.resetMessage),
+      debugResetToken: clearDebugResetToken
+          ? null
+          : (debugResetToken ?? this.debugResetToken),
     );
   }
 }
@@ -84,14 +91,32 @@ class AuthController extends StateNotifier<AuthState> {
 
   Future<bool> login(String email, String password) async {
     state = state.copyWith(
-        isLoading: true, clearError: true, clearResetMessage: true);
+      isLoading: true,
+      clearError: true,
+      clearResetMessage: true,
+      clearSession: true,
+    );
     try {
       final session = await _repository.login(email: email, password: password);
+      if (session.user.roles.contains('admin')) {
+        await _storage.clear();
+        state = state.copyWith(
+          isLoading: false,
+          error: 'Admin accounts must use admin panel',
+          clearSession: true,
+        );
+        return false;
+      }
       await _storage.write(session);
       state = state.copyWith(session: session, isLoading: false);
       return true;
     } on ApiException catch (error) {
-      state = state.copyWith(isLoading: false, error: error.message);
+      await _storage.clear();
+      state = state.copyWith(
+        isLoading: false,
+        error: error.message,
+        clearSession: true,
+      );
       return false;
     }
   }
@@ -124,12 +149,46 @@ class AuthController extends StateNotifier<AuthState> {
 
   Future<void> forgotPassword(String email) async {
     state = state.copyWith(
-        isLoading: true, clearError: true, clearResetMessage: true);
+      isLoading: true,
+      clearError: true,
+      clearResetMessage: true,
+      clearDebugResetToken: true,
+    );
     try {
-      final message = await _repository.forgotPassword(email);
-      state = state.copyWith(isLoading: false, resetMessage: message);
+      final response = await _repository.forgotPassword(email);
+      state = state.copyWith(
+        isLoading: false,
+        resetMessage: response.message,
+        debugResetToken: response.debugResetToken,
+      );
     } on ApiException catch (error) {
       state = state.copyWith(isLoading: false, error: error.message);
+    }
+  }
+
+  Future<bool> resetPassword({
+    required String token,
+    required String newPassword,
+  }) async {
+    state = state.copyWith(
+      isLoading: true,
+      clearError: true,
+      clearResetMessage: true,
+    );
+    try {
+      final message = await _repository.resetPassword(
+        token: token,
+        newPassword: newPassword,
+      );
+      state = state.copyWith(
+        isLoading: false,
+        resetMessage: message,
+        clearDebugResetToken: true,
+      );
+      return true;
+    } on ApiException catch (error) {
+      state = state.copyWith(isLoading: false, error: error.message);
+      return false;
     }
   }
 

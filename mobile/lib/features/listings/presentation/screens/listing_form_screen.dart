@@ -5,6 +5,7 @@ import 'package:electronics_marketplace_mobile/features/auth/presentation/contro
 import 'package:electronics_marketplace_mobile/features/listings/data/listings_repository.dart';
 import 'package:electronics_marketplace_mobile/features/listings/domain/category_models.dart';
 import 'package:electronics_marketplace_mobile/features/listings/domain/listing_form_data.dart';
+import 'package:electronics_marketplace_mobile/features/listings/domain/listing_models.dart';
 import 'package:electronics_marketplace_mobile/features/listings/presentation/controllers/listing_providers.dart';
 import 'package:electronics_marketplace_mobile/shared/widgets/map_preview.dart';
 import 'package:electronics_marketplace_mobile/shared/widgets/network_media_image.dart';
@@ -49,13 +50,58 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
   String _heatingType = 'central';
   bool _furnished = false;
   bool _didPrefill = false;
+  bool _isPrefilling = false;
   bool _isSubmitting = false;
+  String? _submitError;
+  AutovalidateMode _autovalidateMode = AutovalidateMode.disabled;
   final List<File> _selectedImages = [];
+  final List<ListingMedia> _existingMedia = [];
 
   bool get isEditing => widget.listingId != null;
 
   @override
+  void initState() {
+    super.initState();
+    for (final controller in [
+      _titleController,
+      _descriptionController,
+      _cityController,
+      _districtController,
+      _addressController,
+      _mapLabelController,
+      _latitudeController,
+      _longitudeController,
+      _roomsController,
+      _areaController,
+      _floorController,
+      _totalFloorsController,
+      _priceController,
+      _bathroomsController,
+    ]) {
+      controller.addListener(_handleFormChanged);
+    }
+  }
+
+  @override
   void dispose() {
+    for (final controller in [
+      _titleController,
+      _descriptionController,
+      _cityController,
+      _districtController,
+      _addressController,
+      _mapLabelController,
+      _latitudeController,
+      _longitudeController,
+      _roomsController,
+      _areaController,
+      _floorController,
+      _totalFloorsController,
+      _priceController,
+      _bathroomsController,
+    ]) {
+      controller.removeListener(_handleFormChanged);
+    }
     _titleController.dispose();
     _descriptionController.dispose();
     _cityController.dispose();
@@ -85,6 +131,13 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
         title: Text(isEditing
             ? context.tr('Edit property', 'Редактировать объект')
             : context.tr('Create property', 'Создать объект')),
+        actions: [
+          if (context.canPop())
+            TextButton(
+              onPressed: _isSubmitting ? null : () => context.pop(),
+              child: Text(context.tr('Cancel', 'Отмена')),
+            ),
+        ],
       ),
       body: categoriesAsync.when(
         data: (categories) {
@@ -92,8 +145,12 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
             return detailAsync!.when(
               data: (detail) {
                 _prefill(detail);
-                return _buildForm(context, authState, categories,
-                    existingMedia: detail.mediaItems);
+                return _buildForm(
+                  context,
+                  authState,
+                  categories,
+                  existingMedia: _existingMedia,
+                );
               },
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (error, stackTrace) =>
@@ -112,30 +169,66 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
     BuildContext context,
     AuthState authState,
     List<CategoryOption> categories, {
-    List<dynamic> existingMedia = const [],
+    List<ListingMedia> existingMedia = const [],
   }) {
+    final canSaveDraft = !_isSubmitting && _isFormLocallyValid(context);
+    final canPublish = canSaveDraft;
+
     return Form(
       key: _formKey,
+      autovalidateMode: _autovalidateMode,
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          Text(
+            context.tr(
+              'Fields marked with * are required. Optional fields are labeled explicitly.',
+              'Поля со знаком * обязательны. Необязательные поля отмечены отдельно.',
+            ),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 12),
+          if (_submitError != null) ...[
+            Card(
+              color: Theme.of(context).colorScheme.errorContainer,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text(
+                  _submitError!,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onErrorContainer,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
           DropdownButtonFormField<String>(
             initialValue: _purpose,
-            decoration:
-                InputDecoration(labelText: context.tr('Purpose', 'Цель')),
+            decoration: _requiredDecoration(
+              context,
+              'Purpose',
+              'Цель',
+            ),
             items: [
               DropdownMenuItem(
                   value: 'rent', child: Text(context.tr('Rent', 'Аренда'))),
               DropdownMenuItem(
                   value: 'sale', child: Text(context.tr('Sale', 'Продажа'))),
             ],
-            onChanged: (value) => setState(() => _purpose = value ?? 'rent'),
+            onChanged: (value) => setState(() {
+              _purpose = value ?? 'rent';
+              _submitError = null;
+            }),
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
             initialValue: _propertyType,
-            decoration: InputDecoration(
-                labelText: context.tr('Property type', 'Тип объекта')),
+            decoration: _requiredDecoration(
+              context,
+              'Property type',
+              'Тип объекта',
+            ),
             items: [
               DropdownMenuItem(
                   value: 'apartment',
@@ -143,57 +236,86 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
               DropdownMenuItem(
                   value: 'house', child: Text(context.tr('House', 'Дом'))),
             ],
-            onChanged: (value) =>
-                setState(() => _propertyType = value ?? 'apartment'),
+            onChanged: (value) => setState(() {
+              _propertyType = value ?? 'apartment';
+              _submitError = null;
+            }),
           ),
           const SizedBox(height: 12),
           TextFormField(
             controller: _titleController,
-            decoration:
-                InputDecoration(labelText: context.tr('Title', 'Заголовок')),
-            validator: (value) => value == null || value.trim().length < 5
-                ? context.tr('At least 5 characters.', 'Минимум 5 символов.')
-                : null,
+            decoration: _requiredDecoration(
+              context,
+              'Title',
+              'Заголовок',
+              helperText: context.tr(
+                'Minimum 5 characters.',
+                'Минимум 5 символов.',
+              ),
+            ),
+            validator: (value) => _validateTitle(context, value),
           ),
           const SizedBox(height: 12),
           TextFormField(
             controller: _descriptionController,
-            decoration: InputDecoration(
-                labelText: context.tr('Description', 'Описание')),
+            decoration: _requiredDecoration(
+              context,
+              'Description',
+              'Описание',
+              helperText: context.tr(
+                'Minimum 20 characters.',
+                'Минимум 20 символов.',
+              ),
+            ),
             minLines: 4,
             maxLines: 6,
-            validator: (value) => value == null || value.trim().length < 20
-                ? context.tr('At least 20 characters.', 'Минимум 20 символов.')
-                : null,
+            validator: (value) => _validateDescription(context, value),
           ),
           const SizedBox(height: 12),
           TextFormField(
             controller: _cityController,
-            decoration: InputDecoration(labelText: context.tr('City', 'Город')),
-            validator: (value) => value == null || value.trim().length < 2
-                ? context.tr('Enter a city.', 'Укажите город.')
-                : null,
+            decoration: _requiredDecoration(
+              context,
+              'City',
+              'Город',
+              helperText: context.tr(
+                'Minimum 2 characters.',
+                'Минимум 2 символа.',
+              ),
+            ),
+            validator: (value) => _validateCity(context, value),
           ),
           const SizedBox(height: 12),
           TextFormField(
             controller: _districtController,
-            decoration: InputDecoration(
-                labelText: context.tr('District / area', 'Район / зона')),
+            decoration: _optionalDecoration(
+              context,
+              'District / area',
+              'Район / зона',
+            ),
           ),
           const SizedBox(height: 12),
           TextFormField(
             controller: _addressController,
-            decoration:
-                InputDecoration(labelText: context.tr('Address text', 'Адрес')),
-            validator: (value) => value == null || value.trim().length < 5
-                ? context.tr('Enter the address.', 'Укажите адрес.')
-                : null,
+            decoration: _requiredDecoration(
+              context,
+              'Address text',
+              'Адрес',
+              helperText: context.tr(
+                'Minimum 5 characters.',
+                'Минимум 5 символов.',
+              ),
+            ),
+            validator: (value) => _validateAddress(context, value),
           ),
           const SizedBox(height: 12),
           TextFormField(
             controller: _mapLabelController,
-            decoration: InputDecoration(
-                labelText: context.tr('Map label', 'Подпись на карте')),
+            decoration: _optionalDecoration(
+              context,
+              'Map label',
+              'Подпись на карте',
+            ),
           ),
           const SizedBox(height: 12),
           Row(
@@ -203,11 +325,16 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
                   controller: _latitudeController,
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(labelText: 'Latitude'),
-                  validator: (value) =>
-                      value == null || double.tryParse(value.trim()) == null
-                          ? context.tr('Latitude is required.', 'Нужна широта.')
-                          : null,
+                  decoration: _requiredDecoration(
+                    context,
+                    'Latitude',
+                    'Широта',
+                    helperText: context.tr(
+                      'From -90 to 90.',
+                      'Диапазон от -90 до 90.',
+                    ),
+                  ),
+                  validator: (value) => _validateLatitude(context, value),
                 ),
               ),
               const SizedBox(width: 12),
@@ -216,11 +343,16 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
                   controller: _longitudeController,
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(labelText: 'Longitude'),
-                  validator: (value) => value == null ||
-                          double.tryParse(value.trim()) == null
-                      ? context.tr('Longitude is required.', 'Нужна долгота.')
-                      : null,
+                  decoration: _requiredDecoration(
+                    context,
+                    'Longitude',
+                    'Долгота',
+                    helperText: context.tr(
+                      'From -180 to 180.',
+                      'Диапазон от -180 до 180.',
+                    ),
+                  ),
+                  validator: (value) => _validateLongitude(context, value),
                 ),
               ),
             ],
@@ -240,6 +372,7 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
               setState(() {
                 _latitudeController.text = latitude.toStringAsFixed(6);
                 _longitudeController.text = longitude.toStringAsFixed(6);
+                _submitError = null;
               });
             },
           ),
@@ -250,13 +383,16 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
                 child: TextFormField(
                   controller: _roomsController,
                   keyboardType: TextInputType.number,
-                  decoration: InputDecoration(
-                      labelText: context.tr('Rooms', 'Комнаты')),
-                  validator: (value) =>
-                      value == null || int.tryParse(value.trim()) == null
-                          ? context.tr(
-                              'Enter room count.', 'Укажите количество комнат.')
-                          : null,
+                  decoration: _requiredDecoration(
+                    context,
+                    'Rooms',
+                    'Комнаты',
+                    helperText: context.tr(
+                      'Whole number, at least 1.',
+                      'Целое число, минимум 1.',
+                    ),
+                  ),
+                  validator: (value) => _validateRoomCount(context, value),
                 ),
               ),
               const SizedBox(width: 12),
@@ -265,12 +401,16 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
                   controller: _areaController,
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
-                  decoration: InputDecoration(
-                      labelText: context.tr('Area (m²)', 'Площадь (м²)')),
-                  validator: (value) =>
-                      value == null || double.tryParse(value.trim()) == null
-                          ? context.tr('Enter area.', 'Укажите площадь.')
-                          : null,
+                  decoration: _requiredDecoration(
+                    context,
+                    'Area (m²)',
+                    'Площадь (м²)',
+                    helperText: context.tr(
+                      'Must be greater than 0.',
+                      'Должна быть больше 0.',
+                    ),
+                  ),
+                  validator: (value) => _validateArea(context, value),
                 ),
               ),
             ],
@@ -282,8 +422,7 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
                 child: TextFormField(
                   controller: _floorController,
                   keyboardType: TextInputType.number,
-                  decoration:
-                      InputDecoration(labelText: context.tr('Floor', 'Этаж')),
+                  decoration: _optionalDecoration(context, 'Floor', 'Этаж'),
                 ),
               ),
               const SizedBox(width: 12),
@@ -291,16 +430,22 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
                 child: TextFormField(
                   controller: _totalFloorsController,
                   keyboardType: TextInputType.number,
-                  decoration: InputDecoration(
-                      labelText: context.tr('Total floors', 'Всего этажей')),
-                  validator: (value) {
-                    if (_propertyType == 'apartment' &&
-                        (value == null || value.trim().isEmpty)) {
-                      return context.tr('Required for apartments.',
-                          'Обязательно для квартир.');
-                    }
-                    return null;
-                  },
+                  decoration: _propertyType == 'apartment'
+                      ? _requiredDecoration(
+                          context,
+                          'Total floors',
+                          'Всего этажей',
+                          helperText: context.tr(
+                            'Required for apartments.',
+                            'Обязательно для квартир.',
+                          ),
+                        )
+                      : _optionalDecoration(
+                          context,
+                          'Total floors',
+                          'Всего этажей',
+                        ),
+                  validator: (value) => _validateTotalFloors(context, value),
                 ),
               ),
             ],
@@ -313,26 +458,35 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
                   controller: _priceController,
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
-                  decoration:
-                      InputDecoration(labelText: context.tr('Price', 'Цена')),
-                  validator: (value) =>
-                      value == null || double.tryParse(value.trim()) == null
-                          ? context.tr('Enter price.', 'Укажите цену.')
-                          : null,
+                  decoration: _requiredDecoration(
+                    context,
+                    'Price',
+                    'Цена',
+                    helperText: context.tr(
+                      'Must be greater than 0.',
+                      'Должна быть больше 0.',
+                    ),
+                  ),
+                  validator: (value) => _validatePrice(context, value),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: DropdownButtonFormField<String>(
                   initialValue: _currency,
-                  decoration: InputDecoration(
-                      labelText: context.tr('Currency', 'Валюта')),
+                  decoration: _requiredDecoration(
+                    context,
+                    'Currency',
+                    'Валюта',
+                  ),
                   items: const [
                     DropdownMenuItem(value: 'USD', child: Text('USD')),
                     DropdownMenuItem(value: 'KGS', child: Text('KGS')),
                   ],
-                  onChanged: (value) =>
-                      setState(() => _currency = value ?? 'USD'),
+                  onChanged: (value) => setState(() {
+                    _currency = value ?? 'USD';
+                    _submitError = null;
+                  }),
                 ),
               ),
             ],
@@ -341,27 +495,35 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
           TextFormField(
             controller: _bathroomsController,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration:
-                InputDecoration(labelText: context.tr('Bathrooms', 'Санузлы')),
-            validator: (value) =>
-                value == null || double.tryParse(value.trim()) == null
-                    ? context.tr(
-                        'Enter bathroom count.', 'Укажите количество санузлов.')
-                    : null,
+            decoration: _requiredDecoration(
+              context,
+              'Bathrooms',
+              'Санузлы',
+              helperText: context.tr(
+                'Must be greater than 0.',
+                'Должно быть больше 0.',
+              ),
+            ),
+            validator: (value) => _validateBathrooms(context, value),
           ),
           if (_propertyType == 'apartment') ...[
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               initialValue: _heatingType,
-              decoration: InputDecoration(
-                  labelText: context.tr('Heating type', 'Тип отопления')),
+              decoration: _optionalDecoration(
+                context,
+                'Heating type',
+                'Тип отопления',
+              ),
               items: const [
                 DropdownMenuItem(value: 'central', child: Text('Central')),
                 DropdownMenuItem(value: 'gas', child: Text('Gas')),
                 DropdownMenuItem(value: 'electric', child: Text('Electric')),
               ],
-              onChanged: (value) =>
-                  setState(() => _heatingType = value ?? 'central'),
+              onChanged: (value) => setState(() {
+                _heatingType = value ?? 'central';
+                _submitError = null;
+              }),
             ),
           ],
           const SizedBox(height: 8),
@@ -369,7 +531,10 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
             value: _furnished,
             title: Text(context.tr('Furnished', 'С мебелью')),
             contentPadding: EdgeInsets.zero,
-            onChanged: (value) => setState(() => _furnished = value),
+            onChanged: (value) => setState(() {
+              _furnished = value;
+              _submitError = null;
+            }),
           ),
           const SizedBox(height: 12),
           Card(
@@ -381,31 +546,197 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
                   Text(context.tr('Photos', 'Фото'),
                       style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 8),
+                  Text(
+                    context.tr(
+                      'Media is optional. Add photos now if you have them.',
+                      'Медиа необязательно. Добавьте фото сейчас, если они у вас есть.',
+                    ),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
                     children: [
                       for (final image in _selectedImages)
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Image.file(image,
-                              width: 88, height: 88, fit: BoxFit.cover),
-                        ),
-                      for (final media in existingMedia)
-                        if (media.mediaType == 'image')
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: NetworkMediaImage(
-                              assetKey: media.assetKey,
-                              width: 88,
-                              height: 88,
+                        Stack(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Image.file(image,
+                                  width: 88, height: 88, fit: BoxFit.cover),
                             ),
-                          ),
+                            Positioned(
+                              top: 4,
+                              right: 4,
+                              child: CircleAvatar(
+                                radius: 14,
+                                backgroundColor: Colors.black54,
+                                child: IconButton(
+                                  padding: EdgeInsets.zero,
+                                  onPressed: _isSubmitting
+                                      ? null
+                                      : () => setState(() {
+                                            _selectedImages.remove(image);
+                                          }),
+                                  icon: const Icon(
+                                    Icons.close,
+                                    size: 14,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                     ],
                   ),
+                  if (existingMedia.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      context.tr(
+                        'Existing media',
+                        'Текущие медиа',
+                      ),
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 8),
+                    ...List.generate(existingMedia.length, (index) {
+                      final media = existingMedia[index];
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Row(
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: media.mediaType == 'image'
+                                    ? NetworkMediaImage(
+                                        assetKey: media.assetKey,
+                                        width: 88,
+                                        height: 88,
+                                      )
+                                    : Container(
+                                        width: 88,
+                                        height: 88,
+                                        color: Colors.grey.shade200,
+                                        alignment: Alignment.center,
+                                        child: const Icon(
+                                          Icons.videocam_outlined,
+                                        ),
+                                      ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      media.isPrimary
+                                          ? context.tr(
+                                              'Primary media',
+                                              'Основное медиа',
+                                            )
+                                          : context.tr(
+                                              'Media item',
+                                              'Медиафайл',
+                                            ),
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleSmall,
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      media.mimeType,
+                                      style:
+                                          Theme.of(context).textTheme.bodySmall,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Wrap(
+                                      spacing: 8,
+                                      runSpacing: 8,
+                                      children: [
+                                        if (media.mediaType == 'image')
+                                          OutlinedButton(
+                                            onPressed: _isSubmitting
+                                                ? null
+                                                : () => _replaceExistingMedia(
+                                                      authState: authState,
+                                                      media: media,
+                                                    ),
+                                            child: Text(
+                                              context.tr(
+                                                'Replace',
+                                                'Заменить',
+                                              ),
+                                            ),
+                                          ),
+                                        if (!media.isPrimary &&
+                                            media.mediaType == 'image')
+                                          OutlinedButton(
+                                            onPressed: _isSubmitting
+                                                ? null
+                                                : () => _setPrimaryMedia(
+                                                      authState: authState,
+                                                      media: media,
+                                                    ),
+                                            child: Text(
+                                              context.tr(
+                                                'Set primary',
+                                                'Сделать основным',
+                                              ),
+                                            ),
+                                          ),
+                                        OutlinedButton(
+                                          onPressed: _isSubmitting || index == 0
+                                              ? null
+                                              : () => _moveMedia(
+                                                    authState: authState,
+                                                    index: index,
+                                                    direction: -1,
+                                                  ),
+                                          child:
+                                              Text(context.tr('Up', 'Вверх')),
+                                        ),
+                                        OutlinedButton(
+                                          onPressed: _isSubmitting ||
+                                                  index ==
+                                                      existingMedia.length - 1
+                                              ? null
+                                              : () => _moveMedia(
+                                                    authState: authState,
+                                                    index: index,
+                                                    direction: 1,
+                                                  ),
+                                          child:
+                                              Text(context.tr('Down', 'Вниз')),
+                                        ),
+                                        TextButton(
+                                          onPressed: _isSubmitting
+                                              ? null
+                                              : () => _deleteExistingMedia(
+                                                    authState: authState,
+                                                    media: media,
+                                                  ),
+                                          child: Text(
+                                            context.tr('Delete', 'Удалить'),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
+                  ],
                   const SizedBox(height: 12),
                   FilledButton.tonalIcon(
-                    onPressed: _pickImages,
+                    onPressed: _isSubmitting ? null : _pickImages,
                     icon: const Icon(Icons.photo_library_outlined),
                     label: Text(context.tr('Add photos', 'Добавить фото')),
                   ),
@@ -426,13 +757,13 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
             children: [
               Expanded(
                 child: OutlinedButton(
-                  onPressed: _isSubmitting
-                      ? null
-                      : () => _submit(
+                  onPressed: canSaveDraft
+                      ? () => _submit(
                             authState: authState,
                             categories: categories,
                             publishNow: false,
-                          ),
+                          )
+                      : null,
                   child: Text(_isSubmitting
                       ? context.tr('Saving...', 'Сохраняем...')
                       : context.tr('Save draft', 'Сохранить черновик')),
@@ -441,13 +772,13 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
               const SizedBox(width: 12),
               Expanded(
                 child: FilledButton(
-                  onPressed: _isSubmitting
-                      ? null
-                      : () => _submit(
+                  onPressed: canPublish
+                      ? () => _submit(
                             authState: authState,
                             categories: categories,
                             publishNow: true,
-                          ),
+                          )
+                      : null,
                   child: Text(context.tr(
                       'Save and publish', 'Сохранить и опубликовать')),
                 ),
@@ -464,6 +795,10 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
       return;
     }
     _didPrefill = true;
+    _isPrefilling = true;
+    _existingMedia
+      ..clear()
+      ..addAll(detail.mediaItems as List<ListingMedia>);
     _titleController.text = detail.title;
     _descriptionController.text = detail.description;
     _cityController.text = detail.city;
@@ -491,6 +826,7 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
         _heatingType = attribute.optionValue!;
       }
     }
+    _isPrefilling = false;
   }
 
   Future<void> _pickImages() async {
@@ -500,7 +836,190 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
     }
     setState(() {
       _selectedImages.addAll(images.map((item) => File(item.path)));
+      _submitError = null;
     });
+  }
+
+  Future<void> _deleteExistingMedia({
+    required AuthState authState,
+    required ListingMedia media,
+  }) async {
+    final listingId = widget.listingId;
+    final accessToken = authState.session?.accessToken;
+    if (listingId == null || accessToken == null) {
+      return;
+    }
+    final repository = ref.read(listingsRepositoryProvider);
+    setState(() {
+      _isSubmitting = true;
+      _submitError = null;
+    });
+    try {
+      await repository.deleteListingImage(
+        accessToken: accessToken,
+        listingId: listingId,
+        mediaId: media.publicId,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _existingMedia.removeWhere((item) => item.publicId == media.publicId);
+      });
+      ref.invalidate(homeListingsProvider);
+      ref.invalidate(myListingsProvider);
+      ref.invalidate(listingDetailProvider(listingId));
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _submitError = error.toString();
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
+  }
+
+  Future<void> _replaceExistingMedia({
+    required AuthState authState,
+    required ListingMedia media,
+  }) async {
+    final listingId = widget.listingId;
+    final accessToken = authState.session?.accessToken;
+    if (listingId == null || accessToken == null) {
+      return;
+    }
+    final picked =
+        await _picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
+    if (!mounted || picked == null) {
+      return;
+    }
+    final repository = ref.read(listingsRepositoryProvider);
+    setState(() {
+      _isSubmitting = true;
+      _submitError = null;
+    });
+    try {
+      final updated = await repository.replaceListingImage(
+        accessToken: accessToken,
+        listingId: listingId,
+        mediaId: media.publicId,
+        image: File(picked.path),
+      );
+      if (!mounted) {
+        return;
+      }
+      final nextMedia = List<ListingMedia>.from(_existingMedia);
+      final index =
+          nextMedia.indexWhere((item) => item.publicId == media.publicId);
+      if (index >= 0) {
+        nextMedia[index] = updated;
+      }
+      _applyExistingMedia(nextMedia);
+      ref.invalidate(homeListingsProvider);
+      ref.invalidate(myListingsProvider);
+      ref.invalidate(listingDetailProvider(listingId));
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _submitError = error.toString();
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
+  }
+
+  Future<void> _moveMedia({
+    required AuthState authState,
+    required int index,
+    required int direction,
+  }) async {
+    final listingId = widget.listingId;
+    final accessToken = authState.session?.accessToken;
+    if (listingId == null || accessToken == null) {
+      return;
+    }
+    final nextIndex = index + direction;
+    if (nextIndex < 0 || nextIndex >= _existingMedia.length) {
+      return;
+    }
+    final reordered = List<ListingMedia>.from(_existingMedia);
+    final item = reordered.removeAt(index);
+    reordered.insert(nextIndex, item);
+    final repository = ref.read(listingsRepositoryProvider);
+    setState(() {
+      _isSubmitting = true;
+      _submitError = null;
+    });
+    try {
+      final response = await repository.reorderListingMedia(
+        accessToken: accessToken,
+        listingId: listingId,
+        mediaIds: reordered.map((media) => media.publicId).toList(),
+      );
+      if (!mounted) {
+        return;
+      }
+      _applyExistingMedia(response);
+      ref.invalidate(homeListingsProvider);
+      ref.invalidate(myListingsProvider);
+      ref.invalidate(listingDetailProvider(listingId));
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _submitError = error.toString();
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
+  }
+
+  Future<void> _setPrimaryMedia({
+    required AuthState authState,
+    required ListingMedia media,
+  }) async {
+    final listingId = widget.listingId;
+    final accessToken = authState.session?.accessToken;
+    if (listingId == null || accessToken == null) {
+      return;
+    }
+    final repository = ref.read(listingsRepositoryProvider);
+    setState(() {
+      _isSubmitting = true;
+      _submitError = null;
+    });
+    try {
+      final response = await repository.setPrimaryListingMedia(
+        accessToken: accessToken,
+        listingId: listingId,
+        mediaId: media.publicId,
+      );
+      if (!mounted) {
+        return;
+      }
+      _applyExistingMedia(response);
+      ref.invalidate(homeListingsProvider);
+      ref.invalidate(myListingsProvider);
+      ref.invalidate(listingDetailProvider(listingId));
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _submitError = error.toString();
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
   }
 
   Future<void> _submit({
@@ -509,34 +1028,42 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
     required bool publishNow,
   }) async {
     if (!_formKey.currentState!.validate() || authState.session == null) {
+      setState(() {
+        _autovalidateMode = AutovalidateMode.always;
+      });
       return;
     }
     final category = _resolveCategory(categories);
     if (category == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(context.tr(
-                'No matching category is configured for this property type.',
-                'Для этого типа объекта не настроена подходящая категория.'))),
-      );
+      setState(() {
+        _submitError = context.tr(
+          'No matching category is configured for this property type.',
+          'Для этого типа объекта не настроена подходящая категория.',
+        );
+      });
       return;
     }
 
     final floor = int.tryParse(_floorController.text.trim());
     final totalFloors = int.tryParse(_totalFloorsController.text.trim());
     if (floor != null && totalFloors != null && floor > totalFloors) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(context.tr('Floor cannot exceed total floors.',
-                'Этаж не может быть больше общего количества этажей.'))),
-      );
+      setState(() {
+        _submitError = context.tr(
+          'Floor cannot exceed total floors.',
+          'Этаж не может быть больше общего количества этажей.',
+        );
+      });
       return;
     }
 
-    setState(() => _isSubmitting = true);
+    setState(() {
+      _isSubmitting = true;
+      _submitError = null;
+    });
+    final repository = ref.read(listingsRepositoryProvider);
+    final locale = authState.session!.user.locale;
+    final accessToken = authState.session!.accessToken;
     try {
-      final repository = ref.read(listingsRepositoryProvider);
-      final locale = ref.read(authControllerProvider).session!.user.locale;
       final data = ListingFormData(
         publicId: widget.listingId,
         categoryPublicId: category.publicId,
@@ -562,39 +1089,49 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
       );
       final detail = isEditing
           ? await repository.updateListing(
-              accessToken: authState.session!.accessToken,
+              accessToken: accessToken,
               locale: locale,
               data: data,
             )
           : await repository.createListing(
-              accessToken: authState.session!.accessToken,
+              accessToken: accessToken,
               locale: locale,
               data: data,
             );
+      if (!mounted) {
+        return;
+      }
       if (_selectedImages.isNotEmpty) {
         await repository.uploadListingImages(
-          accessToken: authState.session!.accessToken,
+          accessToken: accessToken,
           listingId: detail.publicId,
           images: _selectedImages,
         );
+        if (!mounted) {
+          return;
+        }
       }
       if (publishNow) {
         await repository.publishListing(
-          accessToken: authState.session!.accessToken,
+          accessToken: accessToken,
           listingId: detail.publicId,
         );
+        if (!mounted) {
+          return;
+        }
+      }
+      if (!mounted) {
+        return;
       }
       ref.invalidate(homeListingsProvider);
       ref.invalidate(myListingsProvider);
       ref.invalidate(listingDetailProvider(detail.publicId));
-      if (!mounted) {
-        return;
-      }
-      context.go('/listing/${detail.publicId}');
+      context.push('/listing/${detail.publicId}');
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(error.toString())));
+        setState(() {
+          _submitError = error.toString();
+        });
       }
     } finally {
       if (mounted) {
@@ -613,5 +1150,239 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
       }
     }
     return categories.isEmpty ? null : categories.first;
+  }
+
+  void _handleFormChanged() {
+    if (!mounted || _isPrefilling) {
+      return;
+    }
+    setState(() {
+      _submitError = null;
+    });
+  }
+
+  void _applyExistingMedia(List<ListingMedia> media) {
+    setState(() {
+      _existingMedia
+        ..clear()
+        ..addAll(
+          media.toList()
+            ..sort(
+              (a, b) => a.sortOrder.compareTo(b.sortOrder),
+            ),
+        );
+    });
+  }
+
+  bool _isFormLocallyValid(BuildContext context) {
+    return _validateTitle(context, _titleController.text) == null &&
+        _validateDescription(context, _descriptionController.text) == null &&
+        _validateCity(context, _cityController.text) == null &&
+        _validateAddress(context, _addressController.text) == null &&
+        _validatePrice(context, _priceController.text) == null &&
+        _validateLatitude(context, _latitudeController.text) == null &&
+        _validateLongitude(context, _longitudeController.text) == null &&
+        _validateRoomCount(context, _roomsController.text) == null &&
+        _validateArea(context, _areaController.text) == null &&
+        _validateBathrooms(context, _bathroomsController.text) == null &&
+        _validateTotalFloors(context, _totalFloorsController.text) == null;
+  }
+
+  InputDecoration _requiredDecoration(
+    BuildContext context,
+    String englishLabel,
+    String russianLabel, {
+    String? helperText,
+  }) {
+    return InputDecoration(
+      labelText: '${context.tr(englishLabel, russianLabel)} *',
+      helperText: helperText,
+    );
+  }
+
+  InputDecoration _optionalDecoration(
+    BuildContext context,
+    String englishLabel,
+    String russianLabel, {
+    String? helperText,
+  }) {
+    return InputDecoration(
+      labelText:
+          '${context.tr(englishLabel, russianLabel)} (${context.tr('Optional', 'Необязательно')})',
+      helperText: helperText,
+    );
+  }
+
+  String? _validateTitle(BuildContext context, String? value) {
+    final trimmed = value?.trim() ?? '';
+    if (trimmed.isEmpty) {
+      return context.tr('Title is required.', 'Заголовок обязателен.');
+    }
+    if (trimmed.length < 5) {
+      return context.tr(
+        'Title must be at least 5 characters.',
+        'Заголовок должен быть не короче 5 символов.',
+      );
+    }
+    return null;
+  }
+
+  String? _validateDescription(BuildContext context, String? value) {
+    final trimmed = value?.trim() ?? '';
+    if (trimmed.isEmpty) {
+      return context.tr('Description is required.', 'Описание обязательно.');
+    }
+    if (trimmed.length < 20) {
+      return context.tr(
+        'Description must be at least 20 characters.',
+        'Описание должно быть не короче 20 символов.',
+      );
+    }
+    return null;
+  }
+
+  String? _validateCity(BuildContext context, String? value) {
+    final trimmed = value?.trim() ?? '';
+    if (trimmed.isEmpty) {
+      return context.tr('City is required.', 'Город обязателен.');
+    }
+    if (trimmed.length < 2) {
+      return context.tr(
+        'City must be at least 2 characters.',
+        'Название города должно быть не короче 2 символов.',
+      );
+    }
+    return null;
+  }
+
+  String? _validateAddress(BuildContext context, String? value) {
+    final trimmed = value?.trim() ?? '';
+    if (trimmed.isEmpty) {
+      return context.tr('Address is required.', 'Адрес обязателен.');
+    }
+    if (trimmed.length < 5) {
+      return context.tr(
+        'Address must be at least 5 characters.',
+        'Адрес должен быть не короче 5 символов.',
+      );
+    }
+    return null;
+  }
+
+  String? _validatePrice(BuildContext context, String? value) {
+    final trimmed = value?.trim() ?? '';
+    if (trimmed.isEmpty) {
+      return context.tr('Price is required.', 'Цена обязательна.');
+    }
+    final parsed = double.tryParse(trimmed);
+    if (parsed == null || parsed <= 0) {
+      return context.tr(
+        'Enter a valid price.',
+        'Укажите корректную цену.',
+      );
+    }
+    return null;
+  }
+
+  String? _validateLatitude(BuildContext context, String? value) {
+    final trimmed = value?.trim() ?? '';
+    if (trimmed.isEmpty) {
+      return context.tr('Latitude is required.', 'Нужна широта.');
+    }
+    final parsed = double.tryParse(trimmed);
+    if (parsed == null || parsed < -90 || parsed > 90) {
+      return context.tr(
+        'Latitude must be between -90 and 90.',
+        'Широта должна быть в диапазоне от -90 до 90.',
+      );
+    }
+    return null;
+  }
+
+  String? _validateLongitude(BuildContext context, String? value) {
+    final trimmed = value?.trim() ?? '';
+    if (trimmed.isEmpty) {
+      return context.tr('Longitude is required.', 'Нужна долгота.');
+    }
+    final parsed = double.tryParse(trimmed);
+    if (parsed == null || parsed < -180 || parsed > 180) {
+      return context.tr(
+        'Longitude must be between -180 and 180.',
+        'Долгота должна быть в диапазоне от -180 до 180.',
+      );
+    }
+    return null;
+  }
+
+  String? _validateRoomCount(BuildContext context, String? value) {
+    final trimmed = value?.trim() ?? '';
+    if (trimmed.isEmpty) {
+      return context.tr(
+        'Room count is required.',
+        'Количество комнат обязательно.',
+      );
+    }
+    final parsed = int.tryParse(trimmed);
+    if (parsed == null || parsed < 1) {
+      return context.tr(
+        'Enter a valid room count.',
+        'Укажите корректное количество комнат.',
+      );
+    }
+    return null;
+  }
+
+  String? _validateArea(BuildContext context, String? value) {
+    final trimmed = value?.trim() ?? '';
+    if (trimmed.isEmpty) {
+      return context.tr('Area is required.', 'Площадь обязательна.');
+    }
+    final parsed = double.tryParse(trimmed);
+    if (parsed == null || parsed <= 0) {
+      return context.tr(
+        'Enter a valid area.',
+        'Укажите корректную площадь.',
+      );
+    }
+    return null;
+  }
+
+  String? _validateBathrooms(BuildContext context, String? value) {
+    final trimmed = value?.trim() ?? '';
+    if (trimmed.isEmpty) {
+      return context.tr(
+        'Bathroom count is required.',
+        'Количество санузлов обязательно.',
+      );
+    }
+    final parsed = double.tryParse(trimmed);
+    if (parsed == null || parsed <= 0) {
+      return context.tr(
+        'Enter a valid bathroom count.',
+        'Укажите корректное количество санузлов.',
+      );
+    }
+    return null;
+  }
+
+  String? _validateTotalFloors(BuildContext context, String? value) {
+    if (_propertyType != 'apartment') {
+      return null;
+    }
+    final trimmed = value?.trim() ?? '';
+    if (trimmed.isEmpty) {
+      return context.tr(
+        'Total floors are required for apartments.',
+        'Для квартир нужно указать общее количество этажей.',
+      );
+    }
+    final parsed = int.tryParse(trimmed);
+    if (parsed == null || parsed < 1) {
+      return context.tr(
+        'Enter a valid total floor count.',
+        'Укажите корректное общее количество этажей.',
+      );
+    }
+    return null;
   }
 }

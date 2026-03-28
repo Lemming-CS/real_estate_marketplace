@@ -5,6 +5,7 @@ import 'package:electronics_marketplace_mobile/core/network/api_client.dart';
 import 'package:electronics_marketplace_mobile/core/network/api_endpoints.dart';
 import 'package:electronics_marketplace_mobile/features/profile/domain/profile_models.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mime/mime.dart';
 
 final profileRepositoryProvider = Provider<ProfileRepository>((ref) {
   return ProfileRepository(ref.watch(apiClientProvider));
@@ -45,6 +46,13 @@ class ProfileRepository {
     required String accessToken,
     required File image,
   }) async {
+    final mimeType = lookupMimeType(image.path);
+    if (mimeType == null || !mimeType.startsWith('image/')) {
+      throw const ApiException(
+        'Selected file must be an image (jpeg, png, webp, or another image/* type).',
+      );
+    }
+
     await _client.postMultipart(
       ApiEndpoints.profileImage,
       accessToken: accessToken,

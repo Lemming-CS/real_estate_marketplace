@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:electronics_marketplace_mobile/core/localization/app_locale_controller.dart';
 import 'package:electronics_marketplace_mobile/core/localization/app_strings.dart';
 import 'package:electronics_marketplace_mobile/features/auth/presentation/controllers/auth_controller.dart';
+import 'package:electronics_marketplace_mobile/features/listings/presentation/controllers/listing_providers.dart';
 import 'package:electronics_marketplace_mobile/features/profile/data/profile_repository.dart';
 import 'package:electronics_marketplace_mobile/features/profile/domain/profile_models.dart';
 import 'package:electronics_marketplace_mobile/shared/widgets/auth_required_view.dart';
@@ -60,6 +61,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
 
     final profileAsync = ref.watch(currentProfileProvider);
+    final favoritesAsync = ref.watch(favoritesProvider);
     return MarketplaceShellScaffold(
       currentIndex: 4,
       title: context.tr('Profile', 'Профиль'),
@@ -99,6 +101,30 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   title: Text(profile.email),
                   subtitle: Text('@${profile.username}'),
                   trailing: Text(profile.status),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.favorite_border),
+                  title: Text(
+                      context.tr('Saved favorites', 'Сохраненные избранные')),
+                  subtitle: favoritesAsync.maybeWhen(
+                    data: (page) => Text(
+                      context.tr(
+                        '${page.meta.totalItems} properties saved',
+                        '${page.meta.totalItems} объектов сохранено',
+                      ),
+                    ),
+                    loading: () =>
+                        Text(context.tr('Loading...', 'Загрузка...')),
+                    orElse: () => Text(
+                      context.tr(
+                        'Favorite count is unavailable right now.',
+                        'Счетчик избранного сейчас недоступен.',
+                      ),
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(height: 16),
@@ -190,25 +216,30 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     if (token == null) {
       return;
     }
+    final profileRepository = ref.read(profileRepositoryProvider);
+    final localeController = ref.read(appLocaleControllerProvider.notifier);
 
     setState(() => _isSaving = true);
     try {
-      await ref.read(profileRepositoryProvider).updateProfile(
-            accessToken: token,
-            fullName: _fullNameController.text,
-            phone: _phoneController.text,
-            bio: _bioController.text,
-            locale: _locale,
-          );
-      await ref.read(appLocaleControllerProvider.notifier).setLocale(_locale);
-      ref.invalidate(currentProfileProvider);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content:
-                  Text(context.tr('Profile updated.', 'Профиль обновлен.'))),
-        );
+      await profileRepository.updateProfile(
+        accessToken: token,
+        fullName: _fullNameController.text,
+        phone: _phoneController.text,
+        bio: _bioController.text,
+        locale: _locale,
+      );
+      if (!mounted) {
+        return;
       }
+      await localeController.setLocale(_locale);
+      if (!mounted) {
+        return;
+      }
+      ref.invalidate(currentProfileProvider);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text(context.tr('Profile updated.', 'Профиль обновлен.'))),
+      );
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -227,17 +258,21 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     if (token == null) {
       return;
     }
+    final profileRepository = ref.read(profileRepositoryProvider);
     final picked =
         await _picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
-    if (picked == null) {
+    if (!mounted || picked == null) {
       return;
     }
     setState(() => _isSaving = true);
     try {
-      await ref.read(profileRepositoryProvider).uploadProfileImage(
-            accessToken: token,
-            image: File(picked.path),
-          );
+      await profileRepository.uploadProfileImage(
+        accessToken: token,
+        image: File(picked.path),
+      );
+      if (!mounted) {
+        return;
+      }
       ref.invalidate(currentProfileProvider);
     } catch (error) {
       if (mounted) {

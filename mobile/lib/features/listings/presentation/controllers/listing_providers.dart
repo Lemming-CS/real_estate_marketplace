@@ -14,6 +14,11 @@ final myListingFiltersProvider = StateProvider<ListingFilters>((ref) {
   return const ListingFilters(pageSize: 50);
 });
 
+final publicUserListingFiltersProvider =
+    StateProvider.family<ListingFilters, String>((ref, userId) {
+  return const ListingFilters(pageSize: 50);
+});
+
 final categoriesProvider =
     FutureProvider.autoDispose<List<CategoryOption>>((ref) async {
   final locale = ref.watch(appLocaleControllerProvider).languageCode;
@@ -78,9 +83,10 @@ final publicUserProfileProvider = FutureProvider.autoDispose
 final publicUserListingsProvider =
     FutureProvider.autoDispose.family<ListingPage, String>((ref, userId) async {
   final locale = ref.watch(appLocaleControllerProvider).languageCode;
+  final filters = ref.watch(publicUserListingFiltersProvider(userId));
   return ref.watch(listingsRepositoryProvider).getPublicUserListings(
         userId: userId,
-        filters: const ListingFilters(pageSize: 50),
+        filters: filters,
         locale: locale,
       );
 });
