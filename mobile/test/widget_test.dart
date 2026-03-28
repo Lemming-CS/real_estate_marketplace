@@ -14,4 +14,3 @@ void main() {
     expect(find.text('Starter Home'), findsOneWidget);
   });
 }
-

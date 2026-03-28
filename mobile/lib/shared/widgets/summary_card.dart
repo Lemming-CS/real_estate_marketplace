@@ -33,4 +33,3 @@ class SummaryCard extends StatelessWidget {
     );
   }
 }
-
