@@ -37,6 +37,11 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
       appBar: AppBar(
         title: Text(context.tr('Property details', 'Детали объекта')),
         actions: [
+          IconButton(
+            onPressed: () => context.go('/'),
+            icon: const Icon(Icons.home_outlined),
+            tooltip: context.tr('Home', 'Главная'),
+          ),
           if (authState.isAuthenticated)
             favoritesAsync?.maybeWhen(
                   data: (page) {

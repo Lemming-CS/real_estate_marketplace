@@ -23,6 +23,11 @@ class PublicUserListingsScreen extends ConsumerWidget {
       appBar: AppBar(
         title: Text(context.tr('Seller listings', 'Объявления продавца')),
         actions: [
+          IconButton(
+            onPressed: () => context.go('/'),
+            icon: const Icon(Icons.home_outlined),
+            tooltip: context.tr('Home', 'Главная'),
+          ),
           PopupMenuButton<String>(
             onSelected: (value) {
               if (value == 'reset') {

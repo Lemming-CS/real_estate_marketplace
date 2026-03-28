@@ -31,6 +31,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(context.tr('Sign in', 'Вход')),
+        leading: IconButton(
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+              return;
+            }
+            context.go('/');
+          },
+          icon: const Icon(Icons.arrow_back),
+          tooltip: context.tr('Back', 'Назад'),
+        ),
       ),
       body: Padding(
         padding: const EdgeInsets.all(20),

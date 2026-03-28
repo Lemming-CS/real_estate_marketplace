@@ -29,7 +29,7 @@ final routerProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final location = state.matchedLocation;
       final isAuthenticated = authState.isAuthenticated;
-      final authPages = {'/login', '/register', '/forgot-password'};
+      final authPages = {'/login', '/register'};
 
       if (!isAuthenticated && requiresAuth(location)) {
         return '/login';

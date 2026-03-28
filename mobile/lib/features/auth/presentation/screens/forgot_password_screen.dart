@@ -2,6 +2,7 @@ import 'package:electronics_marketplace_mobile/core/localization/app_strings.dar
 import 'package:electronics_marketplace_mobile/features/auth/presentation/controllers/auth_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 class ForgotPasswordScreen extends ConsumerStatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -30,8 +31,20 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
   Widget build(BuildContext context) {
     final authState = ref.watch(authControllerProvider);
     return Scaffold(
-      appBar:
-          AppBar(title: Text(context.tr('Forgot password', 'Забыли пароль'))),
+      appBar: AppBar(
+        title: Text(context.tr('Forgot password', 'Забыли пароль')),
+        leading: IconButton(
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+              return;
+            }
+            context.go('/');
+          },
+          icon: const Icon(Icons.arrow_back),
+          tooltip: context.tr('Back', 'Назад'),
+        ),
+      ),
       body: Padding(
         padding: const EdgeInsets.all(20),
         child: ListView(

@@ -132,6 +132,11 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
             ? context.tr('Edit property', 'Редактировать объект')
             : context.tr('Create property', 'Создать объект')),
         actions: [
+          IconButton(
+            onPressed: _isSubmitting ? null : () => context.go('/'),
+            icon: const Icon(Icons.home_outlined),
+            tooltip: context.tr('Home', 'Главная'),
+          ),
           if (context.canPop())
             TextButton(
               onPressed: _isSubmitting ? null : () => context.pop(),

@@ -33,8 +33,20 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   Widget build(BuildContext context) {
     final authState = ref.watch(authControllerProvider);
     return Scaffold(
-      appBar:
-          AppBar(title: Text(context.tr('Create account', 'Создать аккаунт'))),
+      appBar: AppBar(
+        title: Text(context.tr('Create account', 'Создать аккаунт')),
+        leading: IconButton(
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+              return;
+            }
+            context.go('/');
+          },
+          icon: const Icon(Icons.arrow_back),
+          tooltip: context.tr('Back', 'Назад'),
+        ),
+      ),
       body: Padding(
         padding: const EdgeInsets.all(20),
         child: Form(

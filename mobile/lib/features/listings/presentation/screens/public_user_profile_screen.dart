@@ -20,8 +20,16 @@ class PublicUserProfileScreen extends ConsumerWidget {
     final listingsAsync = ref.watch(publicUserListingsProvider(userId));
 
     return Scaffold(
-      appBar:
-          AppBar(title: Text(context.tr('Seller profile', 'Профиль продавца'))),
+      appBar: AppBar(
+        title: Text(context.tr('Seller profile', 'Профиль продавца')),
+        actions: [
+          IconButton(
+            onPressed: () => context.go('/'),
+            icon: const Icon(Icons.home_outlined),
+            tooltip: context.tr('Home', 'Главная'),
+          ),
+        ],
+      ),
       body: profileAsync.when(
         data: (profile) {
           return ListView(
