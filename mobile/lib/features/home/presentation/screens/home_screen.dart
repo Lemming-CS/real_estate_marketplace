@@ -303,8 +303,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 controller: minPriceController,
                                 keyboardType: TextInputType.number,
                                 decoration: InputDecoration(
-                                    labelText:
-                                        context.tr('Min price', 'Мин. цена')))),
+                                    labelText: context.tr(
+                                        'Min price (С)', 'Мин. цена (С)'),
+                                    hintText: context.tr('KGS', 'Сом')))),
                         const SizedBox(width: 12),
                         Expanded(
                             child: TextField(
@@ -312,8 +313,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 keyboardType: TextInputType.number,
                                 decoration: InputDecoration(
                                     labelText: context.tr(
-                                        'Max price', 'Макс. цена')))),
+                                        'Max price (С)', 'Макс. цена (С)'),
+                                    hintText: context.tr('KGS', 'Сом')))),
                       ],
+                    ),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        context.tr(
+                          'Mixed-currency price filters use KGS for comparison.',
+                          'Фильтры цены для разных валют используют сомы для сравнения.',
+                        ),
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
+                            ),
+                      ),
                     ),
                     const SizedBox(height: 12),
                     Row(

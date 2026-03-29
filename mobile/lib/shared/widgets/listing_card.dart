@@ -1,5 +1,6 @@
 import 'package:electronics_marketplace_mobile/core/localization/app_strings.dart';
 import 'package:electronics_marketplace_mobile/features/listings/domain/listing_models.dart';
+import 'package:electronics_marketplace_mobile/shared/widgets/listing_price_display.dart';
 import 'package:electronics_marketplace_mobile/shared/widgets/network_media_image.dart';
 import 'package:flutter/material.dart';
 
@@ -102,12 +103,19 @@ class ListingCard extends StatelessWidget {
                         Text(listing.title,
                             style: Theme.of(context).textTheme.titleMedium),
                         const SizedBox(height: 6),
-                        Text(
-                          '${listing.priceAmount} ${listing.currencyCode}',
-                          style: Theme.of(context)
+                        ListingPriceDisplay(
+                          priceAmount: listing.priceAmount,
+                          currencyCode: listing.currencyCode,
+                          primaryStyle: Theme.of(context)
                               .textTheme
                               .titleSmall
                               ?.copyWith(fontWeight: FontWeight.w700),
+                          secondaryStyle:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                  ),
                         ),
                         const SizedBox(height: 4),
                         Text(

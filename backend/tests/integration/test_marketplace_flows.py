@@ -137,6 +137,7 @@ def _create_published_listing(
     description: str,
     price_amount: str,
     city: str,
+    currency_code: str = "USD",
     purpose: ListingPurpose = ListingPurpose.SALE,
     property_type: PropertyType = PropertyType.APARTMENT,
     district: str = "Lenin District",
@@ -155,7 +156,7 @@ def _create_published_listing(
         purpose=purpose,
         property_type=property_type,
         price_amount=Decimal(price_amount),
-        currency_code="USD",
+        currency_code=currency_code,
         item_condition=None,
         status=ListingStatus.PUBLISHED,
         city=city,
@@ -628,6 +629,83 @@ def test_discovery_search_filters_sort_pagination_and_public_owner_pages(test_en
     assert owner_listings.status_code == 200
     assert owner_listings.json()["meta"]["total_items"] == 2
     assert owner_listings.json()["items"][0]["price_amount"] == "700.00"
+
+
+def test_discovery_price_sort_and_filter_use_normalized_kgs_across_currencies(test_environment):
+    client = test_environment["client"]
+    session_factory = test_environment["session_factory"]
+
+    with session_factory() as session:
+        category = _create_category_with_attributes(session)
+        seller = _create_user(
+            session,
+            email="seller.currency@example.com",
+            username="seller_currency",
+            roles=[RoleCode.USER, RoleCode.SELLER],
+        )
+
+        usd_listing = _create_published_listing(
+            session,
+            seller=seller,
+            category=category,
+            title="Sale apartment priced in USD",
+            description="Apartment for sale with price stored in USD for normalized sorting checks.",
+            price_amount="1500.00",
+            currency_code="USD",
+            city="Bishkek",
+            purpose=ListingPurpose.SALE,
+            property_type=PropertyType.APARTMENT,
+            bathrooms_value="1",
+            heating_option="central",
+        )
+        kgs_listing = _create_published_listing(
+            session,
+            seller=seller,
+            category=category,
+            title="Sale apartment priced in KGS",
+            description="Apartment for sale with price stored in KGS for normalized sorting checks.",
+            price_amount="120000.00",
+            currency_code="KGS",
+            city="Bishkek",
+            purpose=ListingPurpose.SALE,
+            property_type=PropertyType.APARTMENT,
+            bathrooms_value="1",
+            heating_option="central",
+        )
+
+    ascending_response = client.get(
+        "/api/v1/listings",
+        params={"purpose": "sale", "sort": "price_asc", "page": 1, "page_size": 10},
+    )
+    assert ascending_response.status_code == 200
+    ascending_ids = [item["public_id"] for item in ascending_response.json()["items"]]
+    assert ascending_ids.index(kgs_listing.public_id) < ascending_ids.index(usd_listing.public_id)
+
+    descending_response = client.get(
+        "/api/v1/listings",
+        params={"purpose": "sale", "sort": "price_desc", "page": 1, "page_size": 10},
+    )
+    assert descending_response.status_code == 200
+    descending_ids = [item["public_id"] for item in descending_response.json()["items"]]
+    assert descending_ids.index(usd_listing.public_id) < descending_ids.index(kgs_listing.public_id)
+
+    min_price_response = client.get(
+        "/api/v1/listings",
+        params={"purpose": "sale", "min_price": "125000", "page": 1, "page_size": 10},
+    )
+    assert min_price_response.status_code == 200
+    min_price_ids = [item["public_id"] for item in min_price_response.json()["items"]]
+    assert usd_listing.public_id in min_price_ids
+    assert kgs_listing.public_id not in min_price_ids
+
+    max_price_response = client.get(
+        "/api/v1/listings",
+        params={"purpose": "sale", "max_price": "125000", "page": 1, "page_size": 10},
+    )
+    assert max_price_response.status_code == 200
+    max_price_ids = [item["public_id"] for item in max_price_response.json()["items"]]
+    assert kgs_listing.public_id in max_price_ids
+    assert usd_listing.public_id not in max_price_ids
 
 
 def test_favorites_add_remove_list_and_unavailable_listing_handling(test_environment):

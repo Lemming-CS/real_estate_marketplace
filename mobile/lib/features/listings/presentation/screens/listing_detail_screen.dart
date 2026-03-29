@@ -6,6 +6,7 @@ import 'package:electronics_marketplace_mobile/features/listings/presentation/co
 import 'package:electronics_marketplace_mobile/features/messaging/data/messaging_repository.dart';
 import 'package:electronics_marketplace_mobile/features/messaging/presentation/controllers/messaging_providers.dart';
 import 'package:electronics_marketplace_mobile/features/reports/data/reports_repository.dart';
+import 'package:electronics_marketplace_mobile/shared/widgets/listing_price_display.dart';
 import 'package:electronics_marketplace_mobile/shared/widgets/map_preview.dart';
 import 'package:electronics_marketplace_mobile/shared/widgets/network_media_image.dart';
 import 'package:flutter/material.dart';
@@ -72,12 +73,17 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
               Text(listing.title,
                   style: Theme.of(context).textTheme.headlineSmall),
               const SizedBox(height: 8),
-              Text(
-                '${listing.priceAmount} ${listing.currencyCode}',
-                style: Theme.of(context)
+              ListingPriceDisplay(
+                priceAmount: listing.priceAmount,
+                currencyCode: listing.currencyCode,
+                primaryStyle: Theme.of(context)
                     .textTheme
                     .titleLarge
                     ?.copyWith(fontWeight: FontWeight.w700),
+                secondaryStyle: Theme.of(context)
+                    .textTheme
+                    .titleMedium
+                    ?.copyWith(color: Theme.of(context).colorScheme.secondary),
               ),
               const SizedBox(height: 8),
               Wrap(

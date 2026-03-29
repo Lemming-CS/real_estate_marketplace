@@ -1353,9 +1353,9 @@ def _apply_common_listing_filters(
     if filters.district:
         query = query.where(Listing.district.ilike(f"%{filters.district.strip()}%"))
     if filters.min_price is not None:
-        query = query.where(Listing.price_amount >= filters.min_price)
+        query = query.where(Listing.normalized_price_kgs >= filters.min_price)
     if filters.max_price is not None:
-        query = query.where(Listing.price_amount <= filters.max_price)
+        query = query.where(Listing.normalized_price_kgs <= filters.max_price)
     if filters.min_area_sqm is not None:
         query = query.where(Listing.area_sqm >= filters.min_area_sqm)
     if filters.max_area_sqm is not None:
@@ -1429,9 +1429,9 @@ def _listing_order_by(*, filters: ListingQueryParams, promotion_expr) -> list:
     if filters.sort == "oldest":
         ordering = [newest_column.asc(), Listing.id.asc()]
     elif filters.sort == "price_asc":
-        ordering = [Listing.price_amount.asc(), newest_column.desc(), Listing.id.desc()]
+        ordering = [Listing.normalized_price_kgs.asc(), newest_column.desc(), Listing.id.desc()]
     elif filters.sort == "price_desc":
-        ordering = [Listing.price_amount.desc(), newest_column.desc(), Listing.id.desc()]
+        ordering = [Listing.normalized_price_kgs.desc(), newest_column.desc(), Listing.id.desc()]
     else:
         ordering = [newest_column.desc(), Listing.id.desc()]
 

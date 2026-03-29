@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from sqlalchemy import (
     Boolean,
@@ -15,12 +15,27 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    event,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 from app.db.enums import ListingCondition, ListingPurpose, ListingStatus, MediaType, PropertyType
 from app.db.mixins import PublicIdMixin, SoftDeleteMixin, TimestampMixin
+
+_PRICE_QUANTIZE = Decimal("0.01")
+_USD_TO_KGS_RATE = Decimal("87.5")
+
+
+def normalized_price_to_kgs(price_amount: Decimal, currency_code: str) -> Decimal:
+    currency = currency_code.strip().upper()
+    if currency == "KGS":
+        normalized = Decimal(price_amount)
+    elif currency == "USD":
+        normalized = Decimal(price_amount) * _USD_TO_KGS_RATE
+    else:
+        raise ValueError(f"Unsupported listing currency: {currency_code}")
+    return normalized.quantize(_PRICE_QUANTIZE, rounding=ROUND_HALF_UP)
 
 
 class Listing(PublicIdMixin, SoftDeleteMixin, TimestampMixin, Base):
@@ -31,8 +46,16 @@ class Listing(PublicIdMixin, SoftDeleteMixin, TimestampMixin, Base):
         Index("ix_listings_status_published_at", "status", "published_at"),
         Index("ix_listings_status_city_published_at", "status", "city", "published_at"),
         Index("ix_listings_status_price_amount", "status", "price_amount"),
+        Index("ix_listings_status_normalized_price_kgs", "status", "normalized_price_kgs"),
         Index("ix_listings_purpose_property_status_published_at", "purpose", "property_type", "status", "published_at"),
         Index("ix_listings_city_purpose_property_price", "city", "purpose", "property_type", "price_amount"),
+        Index(
+            "ix_listings_city_purpose_property_normalized_price_kgs",
+            "city",
+            "purpose",
+            "property_type",
+            "normalized_price_kgs",
+        ),
         Index("ix_listings_status_area_sqm", "status", "area_sqm"),
         Index("ix_listings_status_room_count", "status", "room_count"),
         Index("ix_listings_title", "title"),
@@ -62,6 +85,7 @@ class Listing(PublicIdMixin, SoftDeleteMixin, TimestampMixin, Base):
     )
     price_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     currency_code: Mapped[str] = mapped_column(String(3), nullable=False, default="USD")
+    normalized_price_kgs: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False, default=Decimal("0.00"))
     item_condition: Mapped[ListingCondition | None] = mapped_column(
         Enum(ListingCondition, native_enum=False),
         nullable=True,
@@ -159,3 +183,10 @@ class ListingAttributeValue(TimestampMixin, Base):
 
     listing: Mapped["Listing"] = relationship(back_populates="attribute_values")
     category_attribute: Mapped["CategoryAttribute"] = relationship()
+
+
+@event.listens_for(Listing, "before_insert")
+@event.listens_for(Listing, "before_update")
+def _sync_listing_normalized_price(_mapper, _connection, target: Listing) -> None:
+    target.currency_code = target.currency_code.strip().upper()
+    target.normalized_price_kgs = normalized_price_to_kgs(target.price_amount, target.currency_code)

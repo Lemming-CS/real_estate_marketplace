@@ -60,6 +60,9 @@ class ListingCreateRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_real_estate_fields(self) -> "ListingCreateRequest":
+        self.currency_code = self.currency_code.strip().upper()
+        if self.currency_code not in {"USD", "KGS"}:
+            raise ValueError("currency_code must be USD or KGS.")
         if self.total_floors is not None and self.floor is not None and self.floor > self.total_floors:
             raise ValueError("floor cannot be greater than total_floors.")
         if self.property_type == PropertyType.APARTMENT and self.total_floors is None:
@@ -91,6 +94,10 @@ class ListingUpdateRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_floor_range(self) -> "ListingUpdateRequest":
+        if self.currency_code is not None:
+            self.currency_code = self.currency_code.strip().upper()
+            if self.currency_code not in {"USD", "KGS"}:
+                raise ValueError("currency_code must be USD or KGS.")
         if self.total_floors is not None and self.floor is not None and self.floor > self.total_floors:
             raise ValueError("floor cannot be greater than total_floors.")
         return self
