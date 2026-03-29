@@ -2,10 +2,14 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 from decimal import Decimal
+from mimetypes import guess_type
+from pathlib import Path
+from shutil import copy2
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import Settings, get_settings
 from app.core.security import hash_password
 from app.db.enums import (
     AttachmentType,
@@ -50,6 +54,7 @@ from app.db.models import (
     UserStatusHistory,
 )
 from app.db.session import session_scope
+from app.shared.storage import delete_storage_key
 
 ADMIN_EMAIL = "admin.demo@example.com"
 ADMIN_PASSWORD = "AdminPass123!"
@@ -61,6 +66,8 @@ SALE_SELLER_EMAIL = "sale.agent@example.com"
 SALE_SELLER_PASSWORD = "SaleAgentPass123!"
 SUSPENDED_SELLER_EMAIL = "suspended.owner@example.com"
 SUSPENDED_SELLER_PASSWORD = "SuspendedOwner123!"
+_SEED_PHOTOS_ROOT = Path(__file__).parent / "seed_photos"
+_SEED_IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
 
 
 def utcnow() -> datetime:
@@ -255,6 +262,7 @@ def get_or_create_listing(
     seller: User,
     category: Category,
     title: str,
+    legacy_titles: tuple[str, ...] = (),
     description: str,
     purpose: ListingPurpose,
     property_type: PropertyType,
@@ -275,7 +283,9 @@ def get_or_create_listing(
     moderation_note: str | None = None,
     published_at: datetime | None = None,
 ) -> Listing:
-    listing = session.execute(select(Listing).where(Listing.title == title)).scalar_one_or_none()
+    listing = session.execute(
+        select(Listing).where(Listing.title.in_((title, *legacy_titles)))
+    ).scalar_one_or_none()
     if listing is None:
         listing = Listing(
             seller_id=seller.id,
@@ -306,6 +316,7 @@ def get_or_create_listing(
     else:
         listing.seller_id = seller.id
         listing.category_id = category.id
+        listing.title = title
         listing.description = description
         listing.purpose = purpose
         listing.property_type = property_type
@@ -336,6 +347,7 @@ def upsert_listing_media(
     storage_key: str,
     media_type: MediaType = MediaType.IMAGE,
     mime_type: str = "image/jpeg",
+    file_size_bytes: int | None = None,
     is_primary: bool = False,
 ) -> None:
     media = session.execute(
@@ -351,6 +363,7 @@ def upsert_listing_media(
                 media_type=media_type,
                 storage_key=storage_key,
                 mime_type=mime_type,
+                file_size_bytes=file_size_bytes,
                 sort_order=sort_order,
                 is_primary=is_primary,
             )
@@ -360,7 +373,75 @@ def upsert_listing_media(
     media.media_type = media_type
     media.storage_key = storage_key
     media.mime_type = mime_type
+    media.file_size_bytes = file_size_bytes
     media.is_primary = is_primary
+    media.deleted_at = None
+
+
+def sync_listing_media_from_seed_folder(
+    session: Session,
+    *,
+    settings: Settings,
+    listing: Listing,
+    folder_name: str,
+) -> None:
+    folder = _SEED_PHOTOS_ROOT / folder_name
+    if not folder.exists() or not folder.is_dir():
+        return
+
+    files = sorted(
+        (
+            path
+            for path in folder.iterdir()
+            if path.is_file() and path.suffix.lower() in _SEED_IMAGE_SUFFIXES
+        ),
+        key=lambda path: path.name.lower(),
+    )
+    if not files:
+        return
+
+    existing_media = session.execute(
+        select(ListingMedia)
+        .where(ListingMedia.listing_id == listing.id)
+        .order_by(ListingMedia.sort_order)
+    ).scalars().all()
+    existing_by_sort = {media.sort_order: media for media in existing_media}
+
+    desired_sort_orders: set[int] = set()
+    for index, source_path in enumerate(files, start=1):
+        desired_sort_orders.add(index)
+        suffix = source_path.suffix.lower()
+        relative_path = (
+            Path("listings")
+            / listing.public_id
+            / f"seed-{folder_name}-{index:02d}{suffix}"
+        )
+        absolute_path = Path(settings.media_storage_path) / relative_path
+        absolute_path.parent.mkdir(parents=True, exist_ok=True)
+        copy2(source_path, absolute_path)
+
+        existing = existing_by_sort.get(index)
+        if existing and existing.storage_key != str(relative_path).replace("\\", "/"):
+            delete_storage_key(settings=settings, storage_key=existing.storage_key)
+
+        mime_type = guess_type(source_path.name)[0] or "image/jpeg"
+        upsert_listing_media(
+            session,
+            listing=listing,
+            sort_order=index,
+            storage_key=str(relative_path).replace("\\", "/"),
+            media_type=MediaType.IMAGE,
+            mime_type=mime_type,
+            file_size_bytes=absolute_path.stat().st_size,
+            is_primary=index == 1,
+        )
+
+    for media in existing_media:
+        if media.sort_order in desired_sort_orders:
+            continue
+        delete_storage_key(settings=settings, storage_key=media.storage_key)
+        media.deleted_at = utcnow()
+        media.is_primary = False
 
 
 def upsert_listing_attribute_value(
@@ -681,6 +762,7 @@ def ensure_admin_audit_log(
 
 
 def seed_demo_data() -> None:
+    settings = get_settings()
     with session_scope() as session:
         admin_role = get_or_create_role(session, RoleCode.ADMIN, "Administrator", "Back office administrator")
         user_role = get_or_create_role(session, RoleCode.USER, "User", "Marketplace customer")
@@ -873,17 +955,18 @@ def seed_demo_data() -> None:
             session,
             seller=rent_seller,
             category=apartments,
-            title="2-room apartment near Ala-Too Square",
-            description="Bright furnished apartment with renovated kitchen, balcony, and fast internet. Suitable for long-term rent.",
+            title="2-комнатная квартира рядом с площадью Ала-Тоо",
+            legacy_titles=("2-room apartment near Ala-Too Square",),
+            description="Светлая меблированная квартира с обновленной кухней, балконом и быстрым интернетом. Подходит для долгосрочной аренды.",
             purpose=ListingPurpose.RENT,
             property_type=PropertyType.APARTMENT,
             price_amount=Decimal("850.00"),
             item_condition=None,
             status=ListingStatus.PUBLISHED,
             city="Bishkek",
-            district="Lenin District",
-            address_text="105 Chui Avenue, Bishkek",
-            map_label="Ala-Too Square area",
+            district="Ленинский район",
+            address_text="проспект Чуй, 105, Бишкек",
+            map_label="район площади Ала-Тоо",
             latitude=Decimal("42.8746210"),
             longitude=Decimal("74.5697620"),
             room_count=2,
@@ -897,8 +980,9 @@ def seed_demo_data() -> None:
             session,
             seller=sale_seller,
             category=houses,
-            title="Family house with garden in Kok-Jar",
-            description="Spacious detached house with private yard, updated heating, and covered parking. Ready for immediate sale.",
+            title="Семейный дом с садом в Кок-Жаре",
+            legacy_titles=("Family house with garden in Kok-Jar",),
+            description="Просторный отдельный дом с частным двором, обновленным отоплением и крытой парковкой. Полностью готов к продаже.",
             purpose=ListingPurpose.SALE,
             property_type=PropertyType.HOUSE,
             price_amount=Decimal("185000.00"),
@@ -906,8 +990,8 @@ def seed_demo_data() -> None:
             status=ListingStatus.PUBLISHED,
             city="Bishkek",
             district="Kok-Jar",
-            address_text="14 Kok-Jar Street, Bishkek",
-            map_label="Kok-Jar residential area",
+            address_text="улица Кок-Жар, 14, Бишкек",
+            map_label="жилой район Кок-Жар",
             latitude=Decimal("42.8413500"),
             longitude=Decimal("74.6408500"),
             room_count=5,
@@ -921,17 +1005,18 @@ def seed_demo_data() -> None:
             session,
             seller=sale_seller,
             category=apartments,
-            title="1-room apartment advertised below market",
-            description="Compact apartment listed for urgent sale. Reported by a user for suspicious pricing and incomplete disclosure.",
+            title="1-комнатная квартира по цене ниже рынка",
+            legacy_titles=("1-room apartment advertised below market",),
+            description="Компактная квартира выставлена на срочную продажу. Пользователь пожаловался на подозрительно низкую цену и неполное описание.",
             purpose=ListingPurpose.SALE,
             property_type=PropertyType.APARTMENT,
             price_amount=Decimal("38000.00"),
             item_condition=None,
             status=ListingStatus.PUBLISHED,
             city="Bishkek",
-            district="Sverdlov District",
-            address_text="22 Toktogul Street, Bishkek",
-            map_label="Toktogul / Isanova area",
+            district="Свердловский район",
+            address_text="улица Токтогула, 22, Бишкек",
+            map_label="район Токтогула / Исанова",
             latitude=Decimal("42.8799400"),
             longitude=Decimal("74.5901500"),
             room_count=1,
@@ -944,8 +1029,9 @@ def seed_demo_data() -> None:
             session,
             seller=rent_seller,
             category=houses,
-            title="Draft townhouse for rent in Asanbay",
-            description="Draft property listing waiting for final photos and owner confirmation before publication.",
+            title="Черновик таунхауса в аренду в Асанбае",
+            legacy_titles=("Draft townhouse for rent in Asanbay",),
+            description="Черновик объекта, ожидающий финальные фотографии и подтверждение владельца перед публикацией.",
             purpose=ListingPurpose.RENT,
             property_type=PropertyType.HOUSE,
             price_amount=Decimal("1400.00"),
@@ -953,8 +1039,8 @@ def seed_demo_data() -> None:
             status=ListingStatus.DRAFT,
             city="Bishkek",
             district="Asanbay",
-            address_text="8 Asanbay Lane, Bishkek",
-            map_label="Asanbay area",
+            address_text="переулок Асанбай, 8, Бишкек",
+            map_label="район Асанбай",
             latitude=Decimal("42.8205500"),
             longitude=Decimal("74.6152400"),
             room_count=4,
@@ -967,17 +1053,18 @@ def seed_demo_data() -> None:
             session,
             seller=suspended_seller,
             category=apartments,
-            title="Suspended seller apartment listing",
-            description="This listing belongs to a suspended seller account and should remain hidden from public discovery.",
+            title="Квартира продавца с приостановленным аккаунтом",
+            legacy_titles=("Suspended seller apartment listing",),
+            description="Это объявление принадлежит продавцу с приостановленным аккаунтом и должно оставаться скрытым из публичной выдачи.",
             purpose=ListingPurpose.RENT,
             property_type=PropertyType.APARTMENT,
             price_amount=Decimal("600.00"),
             item_condition=None,
             status=ListingStatus.INACTIVE,
             city="Bishkek",
-            district="Oktyabr District",
-            address_text="77 Yunusaliev Avenue, Bishkek",
-            map_label="South district area",
+            district="Октябрьский район",
+            address_text="проспект Юнусалиева, 77, Бишкек",
+            map_label="южный район",
             latitude=Decimal("42.8427100"),
             longitude=Decimal("74.6209100"),
             room_count=2,
@@ -985,63 +1072,37 @@ def seed_demo_data() -> None:
             floor=5,
             total_floors=9,
             furnished=True,
-            moderation_note="Seller account suspended after repeated policy complaints.",
+            moderation_note="Аккаунт продавца приостановлен после повторных жалоб на нарушение правил.",
         )
-
-        upsert_listing_media(
+        sync_listing_media_from_seed_folder(
             session,
+            settings=settings,
             listing=rent_apartment_listing,
-            sort_order=1,
-            storage_key="demo/listings/rent-apartment/living-room.jpg",
-            is_primary=True,
+            folder_name="apartment_1",
         )
-        upsert_listing_media(
+        sync_listing_media_from_seed_folder(
             session,
-            listing=rent_apartment_listing,
-            sort_order=2,
-            storage_key="demo/listings/rent-apartment/bedroom.jpg",
-        )
-        upsert_listing_media(
-            session,
-            listing=rent_apartment_listing,
-            sort_order=3,
-            storage_key="demo/listings/rent-apartment/tour.mp4",
-            media_type=MediaType.VIDEO,
-            mime_type="video/mp4",
-        )
-        upsert_listing_media(
-            session,
+            settings=settings,
             listing=sale_house_listing,
-            sort_order=1,
-            storage_key="demo/listings/sale-house/front.jpg",
-            is_primary=True,
+            folder_name="house_1",
         )
-        upsert_listing_media(
+        sync_listing_media_from_seed_folder(
             session,
-            listing=sale_house_listing,
-            sort_order=2,
-            storage_key="demo/listings/sale-house/garden.jpg",
-        )
-        upsert_listing_media(
-            session,
+            settings=settings,
             listing=reported_apartment_listing,
-            sort_order=1,
-            storage_key="demo/listings/reported-apartment/front.jpg",
-            is_primary=True,
+            folder_name="apartment_2",
         )
-        upsert_listing_media(
+        sync_listing_media_from_seed_folder(
             session,
+            settings=settings,
             listing=draft_house_listing,
-            sort_order=1,
-            storage_key="demo/listings/draft-house/front.jpg",
-            is_primary=True,
+            folder_name="house_2",
         )
-        upsert_listing_media(
+        sync_listing_media_from_seed_folder(
             session,
+            settings=settings,
             listing=suspended_listing,
-            sort_order=1,
-            storage_key="demo/listings/suspended-listing/front.jpg",
-            is_primary=True,
+            folder_name="apartment_3",
         )
 
         upsert_listing_attribute_value(
