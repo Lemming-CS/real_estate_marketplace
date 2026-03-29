@@ -3,7 +3,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Literal
 from fastapi.encoders import jsonable_encoder
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, UploadFile, status
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
@@ -424,12 +424,16 @@ def delete_listing_media_endpoint(
 def listing_detail(
     listing_public_id: str,
     locale: Literal["en", "ru"] | None = Query(default=None),
+    guest_token: str | None = Header(default=None, alias="X-Guest-Token"),
     db: Session = Depends(get_db),
     current_user: User | None = Depends(get_optional_current_user),
 ) -> ListingDetailSchema:
-    return get_listing_detail(
+    listing = get_listing_detail(
         db,
         listing_public_id=listing_public_id,
         actor=current_user,
+        guest_token=guest_token,
         locale=_resolved_locale(current_user, locale),
     )
+    db.commit()
+    return listing

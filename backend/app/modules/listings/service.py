@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import timedelta
 from math import ceil
 from pathlib import Path
 
@@ -20,6 +21,7 @@ from app.db.models import (
     Listing,
     ListingAttributeValue,
     ListingMedia,
+    ListingView,
     Promotion,
     PromotionPackage,
     Report,
@@ -57,6 +59,7 @@ MAX_LISTING_MEDIA_COUNT = 20
 MAX_LISTING_IMAGE_SIZE_BYTES = 10 * 1024 * 1024
 MAX_LISTING_VIDEO_SIZE_BYTES = 50 * 1024 * 1024
 ALLOWED_LISTING_MEDIA_MIME_TYPES = {"image/jpeg", "image/png", "image/webp", "video/mp4"}
+LISTING_VIEW_COOLDOWN = timedelta(hours=24)
 
 
 def list_public_listings(
@@ -122,11 +125,18 @@ def get_listing_detail(
     *,
     listing_public_id: str,
     actor: User | None,
+    guest_token: str | None,
     locale: str,
 ) -> ListingDetailSchema:
     listing = _get_listing_or_404(session, listing_public_id=listing_public_id)
     if not _can_view_listing(session=session, listing=listing, actor=actor):
         raise AppError(status_code=404, code="listing_not_found", message="Listing was not found.")
+    _record_listing_view_if_needed(
+        session,
+        listing=listing,
+        actor=actor,
+        guest_token=guest_token,
+    )
     return _build_listing_detail_schema(
         session,
         listing=listing,
@@ -762,6 +772,7 @@ def list_favorites(
     )
     listings_by_id = {listing.id: listing for listing in listings}
     promoted_map = _active_promotion_map(session, listing_ids)
+    favorite_count_map = _favorite_count_map(session, listing_ids)
 
     items = []
     for favorite in favorites:
@@ -776,6 +787,7 @@ def list_favorites(
                         listing,
                         locale=locale,
                         is_promoted=promoted_map.get(listing.id, False),
+                        favorites_count=favorite_count_map.get(listing.id, 0),
                     )
                     if listing
                     else None
@@ -1140,11 +1152,93 @@ def _primary_media(listing: Listing) -> ListingMedia | None:
     return media_items[0] if media_items else None
 
 
+def _favorite_count_map(session: Session, listing_ids: list[int]) -> dict[int, int]:
+    if not listing_ids:
+        return {}
+    rows = session.execute(
+        select(Favorite.listing_id, func.count(Favorite.id))
+        .where(Favorite.listing_id.in_(listing_ids))
+        .group_by(Favorite.listing_id)
+    ).all()
+    return {listing_id: count for listing_id, count in rows}
+
+
+def _record_listing_view_if_needed(
+    session: Session,
+    *,
+    listing: Listing,
+    actor: User | None,
+    guest_token: str | None,
+) -> None:
+    if actor is not None and actor.id == listing.seller_id:
+        return
+    normalized_guest_token = None if actor is not None else _normalized_guest_token(guest_token)
+    if actor is None and normalized_guest_token is None:
+        return
+
+    cooldown_threshold = utcnow() - LISTING_VIEW_COOLDOWN
+    view = session.execute(
+        select(ListingView).where(
+            ListingView.listing_id == listing.id,
+            ListingView.user_id == (actor.id if actor is not None else None),
+            ListingView.guest_token == (None if actor is not None else normalized_guest_token),
+        )
+    ).scalar_one_or_none()
+
+    if view is not None:
+        if view.last_viewed_at > cooldown_threshold:
+            return
+        view.last_viewed_at = utcnow()
+        listing.view_count = (listing.view_count or 0) + 1
+        return
+
+    session.add(
+        ListingView(
+            listing_id=listing.id,
+            user_id=actor.id if actor is not None else None,
+            guest_token=None if actor is not None else normalized_guest_token,
+            last_viewed_at=utcnow(),
+        )
+    )
+    try:
+        session.flush()
+    except IntegrityError:
+        session.rollback()
+        listing = _get_listing_or_404(session, listing_public_id=listing.public_id)
+        view = session.execute(
+            select(ListingView).where(
+                ListingView.listing_id == listing.id,
+                ListingView.user_id == (actor.id if actor is not None else None),
+                ListingView.guest_token == (None if actor is not None else normalized_guest_token),
+            )
+        ).scalar_one_or_none()
+        if view is None or view.last_viewed_at > cooldown_threshold:
+            return
+        view.last_viewed_at = utcnow()
+    listing.view_count = (listing.view_count or 0) + 1
+
+
+def _normalized_guest_token(guest_token: str | None) -> str | None:
+    if guest_token is None:
+        return None
+    normalized = guest_token.strip()
+    if not normalized:
+        return None
+    if len(normalized) > 64:
+        raise AppError(
+            status_code=400,
+            code="invalid_guest_token",
+            message="Guest token is invalid.",
+        )
+    return normalized
+
+
 def _build_listing_summary_schema(
     listing: Listing,
     *,
     locale: str,
     is_promoted: bool,
+    favorites_count: int = 0,
     promotion_state: ListingPromotionStateSchema | None = None,
 ) -> ListingSummarySchema:
     primary_media = _primary_media(listing)
@@ -1170,6 +1264,8 @@ def _build_listing_summary_schema(
         category=_build_listing_category_schema(listing.category, locale=locale),
         seller=_build_listing_seller_schema(listing.seller),
         primary_media=_build_listing_media_schema(primary_media) if primary_media else None,
+        favorites_count=favorites_count,
+        view_count=listing.view_count,
         is_promoted=is_promoted,
         promotion_state=promotion_state,
         published_at=listing.published_at,
@@ -1187,10 +1283,12 @@ def _build_listing_detail_schema(
     promotion_state: ListingPromotionStateSchema | None = None,
     include_exact_address: bool = False,
 ) -> ListingDetailSchema:
+    favorites_count = _favorite_count_map(session, [listing.id]).get(listing.id, 0)
     summary = _build_listing_summary_schema(
         listing,
         locale=locale,
         is_promoted=is_promoted,
+        favorites_count=favorites_count,
         promotion_state=promotion_state,
     )
     return ListingDetailSchema(
@@ -1305,6 +1403,7 @@ def _paginate_listings(
     listing_ids = [row[0] for row in rows]
     promoted_map = {row[0]: bool(row[1]) for row in rows}
     promotion_state_map = _active_promotion_state_map(session, listing_ids, locale=locale)
+    favorite_count_map = _favorite_count_map(session, listing_ids)
 
     listings = session.execute(_listing_query().where(Listing.id.in_(listing_ids))).scalars().all()
     listings_by_id = {listing.id: listing for listing in listings}
@@ -1313,6 +1412,7 @@ def _paginate_listings(
             listings_by_id[listing_id],
             locale=locale,
             is_promoted=promoted_map.get(listing_id, False),
+            favorites_count=favorite_count_map.get(listing_id, 0),
             promotion_state=promotion_state_map.get(listing_id),
         )
         for listing_id in listing_ids

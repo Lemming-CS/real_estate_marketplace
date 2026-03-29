@@ -219,6 +219,8 @@ class ListingSummarySchema(BaseModel):
     category: ListingCategorySummarySchema
     seller: ListingSellerSummarySchema
     primary_media: ListingMediaSchema | None = None
+    favorites_count: int = 0
+    view_count: int = 0
     is_promoted: bool = False
     promotion_state: ListingPromotionStateSchema | None = None
     published_at: datetime | None = None

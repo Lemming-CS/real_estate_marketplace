@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:electronics_marketplace_mobile/app/providers.dart';
+import 'package:electronics_marketplace_mobile/core/auth/session_expiry_notifier.dart';
 import 'package:electronics_marketplace_mobile/core/network/api_client.dart';
 import 'package:electronics_marketplace_mobile/core/localization/app_locale_controller.dart';
 import 'package:electronics_marketplace_mobile/core/storage/auth_session_storage.dart';
@@ -58,12 +59,24 @@ final authSessionStorageProvider = Provider<AuthSessionStorage>((ref) {
 });
 
 class AuthController extends StateNotifier<AuthState> {
-  AuthController(this._repository, this._storage) : super(const AuthState()) {
+  AuthController(
+    this._repository,
+    this._storage,
+    SessionExpiryNotifier sessionExpiryNotifier,
+  ) : super(const AuthState()) {
+    _sessionExpirySubscription = sessionExpiryNotifier.stream.listen((_) {
+      unawaited(
+        _clearLocalSession(
+          errorMessage: 'Session expired, please sign in again',
+        ),
+      );
+    });
     unawaited(_restoreSession());
   }
 
   final AuthRepository _repository;
   final AuthSessionStorage _storage;
+  late final StreamSubscription<void> _sessionExpirySubscription;
 
   String? get accessToken => state.session?.accessToken;
   AuthUser? get currentUser => state.session?.user;
@@ -84,8 +97,11 @@ class AuthController extends StateNotifier<AuthState> {
       await _storage.write(session);
       state = state.copyWith(session: session, clearError: true);
     } on ApiException catch (error) {
-      await signOut(silent: true);
-      state = state.copyWith(error: error.message);
+      if (error.statusCode == 401) {
+        await _clearLocalSession();
+        return;
+      }
+      await _clearLocalSession(errorMessage: error.message);
     }
   }
 
@@ -208,6 +224,24 @@ class AuthController extends StateNotifier<AuthState> {
       state = state.copyWith(clearError: true, clearResetMessage: true);
     }
   }
+
+  Future<void> _clearLocalSession({String? errorMessage}) async {
+    await _storage.clear();
+    state = const AuthState();
+    if (errorMessage != null && errorMessage.isNotEmpty) {
+      state = state.copyWith(
+        error: errorMessage,
+        clearResetMessage: true,
+        clearDebugResetToken: true,
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _sessionExpirySubscription.cancel();
+    super.dispose();
+  }
 }
 
 final authControllerProvider =
@@ -215,5 +249,6 @@ final authControllerProvider =
   return AuthController(
     ref.watch(authRepositoryProvider),
     ref.watch(authSessionStorageProvider),
+    ref.watch(sessionExpiryNotifierProvider),
   );
 });

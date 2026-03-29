@@ -20,47 +20,62 @@ class ApiException implements Exception {
 class ApiClient {
   ApiClient({
     required this.baseUrl,
+    this.onUnauthorized,
     http.Client? client,
   }) : _client = client ?? http.Client();
 
   final String baseUrl;
+  final void Function()? onUnauthorized;
   final http.Client _client;
 
   Future<Map<String, dynamic>> getJson(
     String path, {
     String? accessToken,
     Map<String, String?> query = const {},
+    Map<String, String> headers = const {},
+    bool notifyOnUnauthorized = true,
   }) async {
     final response = await _client.get(
       _uri(path, query),
-      headers: _headers(accessToken: accessToken),
+      headers: _headers(accessToken: accessToken, extraHeaders: headers),
     );
-    return _decodeMap(response);
+    return _decodeMap(
+      response,
+      notifyOnUnauthorized: accessToken != null && notifyOnUnauthorized,
+    );
   }
 
   Future<Map<String, dynamic>> getAbsoluteJson(
     String url, {
     String? accessToken,
+    bool notifyOnUnauthorized = true,
   }) async {
     final response = await _client.get(
-      Uri.parse(url),
+      _resolvedUri(url),
       headers: _headers(accessToken: accessToken),
     );
-    return _decodeMap(response);
+    return _decodeMap(
+      response,
+      notifyOnUnauthorized: accessToken != null && notifyOnUnauthorized,
+    );
   }
 
   Future<List<int>> getAbsoluteBytes(
     String url, {
     String? accessToken,
+    bool notifyOnUnauthorized = true,
   }) async {
-    final response = await _client.get(
-      Uri.parse(url),
-      headers: _headers(accessToken: accessToken),
-    );
+    final request = http.Request('GET', _resolvedUri(url))
+      ..headers.addAll(_headers(accessToken: accessToken));
+    final streamed = await _client.send(request);
+    final response = await http.Response.fromStream(streamed);
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return response.bodyBytes;
     }
-    _decode(response);
+    _decode(
+      response,
+      notifyOnUnauthorized: accessToken != null && notifyOnUnauthorized,
+    );
     return const [];
   }
 
@@ -68,12 +83,16 @@ class ApiClient {
     String path, {
     String? accessToken,
     Map<String, String?> query = const {},
+    bool notifyOnUnauthorized = true,
   }) async {
     final response = await _client.get(
       _uri(path, query),
       headers: _headers(accessToken: accessToken),
     );
-    return _decodeList(response);
+    return _decodeList(
+      response,
+      notifyOnUnauthorized: accessToken != null && notifyOnUnauthorized,
+    );
   }
 
   Future<Map<String, dynamic>> postJson(
@@ -81,13 +100,17 @@ class ApiClient {
     String? accessToken,
     Map<String, dynamic>? body,
     Map<String, String?> query = const {},
+    bool notifyOnUnauthorized = true,
   }) async {
     final response = await _client.post(
       _uri(path, query),
       headers: _headers(accessToken: accessToken),
       body: jsonEncode(body ?? <String, dynamic>{}),
     );
-    return _decodeMap(response);
+    return _decodeMap(
+      response,
+      notifyOnUnauthorized: accessToken != null && notifyOnUnauthorized,
+    );
   }
 
   Future<List<dynamic>> postJsonList(
@@ -95,13 +118,17 @@ class ApiClient {
     String? accessToken,
     Map<String, dynamic>? body,
     Map<String, String?> query = const {},
+    bool notifyOnUnauthorized = true,
   }) async {
     final response = await _client.post(
       _uri(path, query),
       headers: _headers(accessToken: accessToken),
       body: jsonEncode(body ?? <String, dynamic>{}),
     );
-    return _decodeList(response);
+    return _decodeList(
+      response,
+      notifyOnUnauthorized: accessToken != null && notifyOnUnauthorized,
+    );
   }
 
   Future<Map<String, dynamic>> patchJson(
@@ -109,13 +136,17 @@ class ApiClient {
     String? accessToken,
     Map<String, dynamic>? body,
     Map<String, String?> query = const {},
+    bool notifyOnUnauthorized = true,
   }) async {
     final response = await _client.patch(
       _uri(path, query),
       headers: _headers(accessToken: accessToken),
       body: jsonEncode(body ?? <String, dynamic>{}),
     );
-    return _decodeMap(response);
+    return _decodeMap(
+      response,
+      notifyOnUnauthorized: accessToken != null && notifyOnUnauthorized,
+    );
   }
 
   Future<List<dynamic>> patchJsonList(
@@ -123,24 +154,32 @@ class ApiClient {
     String? accessToken,
     Map<String, dynamic>? body,
     Map<String, String?> query = const {},
+    bool notifyOnUnauthorized = true,
   }) async {
     final response = await _client.patch(
       _uri(path, query),
       headers: _headers(accessToken: accessToken),
       body: jsonEncode(body ?? <String, dynamic>{}),
     );
-    return _decodeList(response);
+    return _decodeList(
+      response,
+      notifyOnUnauthorized: accessToken != null && notifyOnUnauthorized,
+    );
   }
 
   Future<Map<String, dynamic>> deleteJson(
     String path, {
     String? accessToken,
+    bool notifyOnUnauthorized = true,
   }) async {
     final response = await _client.delete(
       _uri(path, const {}),
       headers: _headers(accessToken: accessToken),
     );
-    return _decodeMap(response);
+    return _decodeMap(
+      response,
+      notifyOnUnauthorized: accessToken != null && notifyOnUnauthorized,
+    );
   }
 
   Future<Map<String, dynamic>> postMultipart(
@@ -149,6 +188,7 @@ class ApiClient {
     String? accessToken,
     String fileField = 'upload',
     Map<String, String> fields = const {},
+    bool notifyOnUnauthorized = true,
   }) async {
     final request = http.MultipartRequest('POST', _uri(path, const {}))
       ..headers.addAll(_multipartHeaders(accessToken: accessToken))
@@ -163,7 +203,10 @@ class ApiClient {
       );
     }
     final streamed = await request.send();
-    return _decodeMap(await http.Response.fromStream(streamed));
+    return _decodeMap(
+      await http.Response.fromStream(streamed),
+      notifyOnUnauthorized: accessToken != null && notifyOnUnauthorized,
+    );
   }
 
   Future<Map<String, dynamic>> putMultipart(
@@ -172,6 +215,7 @@ class ApiClient {
     String? accessToken,
     String fileField = 'upload',
     Map<String, String> fields = const {},
+    bool notifyOnUnauthorized = true,
   }) async {
     final request = http.MultipartRequest('PUT', _uri(path, const {}))
       ..headers.addAll(_multipartHeaders(accessToken: accessToken))
@@ -186,7 +230,10 @@ class ApiClient {
       );
     }
     final streamed = await request.send();
-    return _decodeMap(await http.Response.fromStream(streamed));
+    return _decodeMap(
+      await http.Response.fromStream(streamed),
+      notifyOnUnauthorized: accessToken != null && notifyOnUnauthorized,
+    );
   }
 
   Uri _uri(String path, Map<String, String?> query) {
@@ -202,11 +249,23 @@ class ApiClient {
     return uri.replace(queryParameters: filtered.isEmpty ? null : filtered);
   }
 
-  Map<String, String> _headers({String? accessToken}) {
+  Uri _resolvedUri(String urlOrPath) {
+    final parsed = Uri.parse(urlOrPath);
+    if (parsed.hasScheme) {
+      return parsed;
+    }
+    return Uri.parse(baseUrl).resolve(urlOrPath);
+  }
+
+  Map<String, String> _headers({
+    String? accessToken,
+    Map<String, String> extraHeaders = const {},
+  }) {
     final headers = <String, String>{'Content-Type': 'application/json'};
     if (accessToken != null && accessToken.isNotEmpty) {
       headers['Authorization'] = 'Bearer $accessToken';
     }
+    headers.addAll(extraHeaders);
     return headers;
   }
 
@@ -218,23 +277,34 @@ class ApiClient {
     return headers;
   }
 
-  Map<String, dynamic> _decodeMap(http.Response response) {
-    final payload = _decode(response);
+  Map<String, dynamic> _decodeMap(
+    http.Response response, {
+    bool notifyOnUnauthorized = false,
+  }) {
+    final payload =
+        _decode(response, notifyOnUnauthorized: notifyOnUnauthorized);
     if (payload is Map<String, dynamic>) {
       return payload;
     }
     throw const ApiException('Unexpected response shape.');
   }
 
-  List<dynamic> _decodeList(http.Response response) {
-    final payload = _decode(response);
+  List<dynamic> _decodeList(
+    http.Response response, {
+    bool notifyOnUnauthorized = false,
+  }) {
+    final payload =
+        _decode(response, notifyOnUnauthorized: notifyOnUnauthorized);
     if (payload is List<dynamic>) {
       return payload;
     }
     throw const ApiException('Unexpected response shape.');
   }
 
-  dynamic _decode(http.Response response) {
+  dynamic _decode(
+    http.Response response, {
+    bool notifyOnUnauthorized = false,
+  }) {
     final raw = response.body.trim();
 
     dynamic body;
@@ -259,6 +329,15 @@ class ApiClient {
 
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return body;
+    }
+
+    if (response.statusCode == 401 && notifyOnUnauthorized) {
+      onUnauthorized?.call();
+      throw const ApiException(
+        'Session expired, please sign in again.',
+        code: 'session_expired',
+        statusCode: 401,
+      );
     }
 
     debugPrint(

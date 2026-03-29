@@ -49,11 +49,18 @@ class ListingsRepository {
     required String listingId,
     required String locale,
     String? accessToken,
+    String? guestToken,
   }) async {
     final json = await _client.getJson(
       ApiEndpoints.listingDetail(listingId),
       accessToken: accessToken,
       query: {'locale': locale},
+      headers: {
+        if ((accessToken == null || accessToken.isEmpty) &&
+            guestToken != null &&
+            guestToken.isNotEmpty)
+          'X-Guest-Token': guestToken,
+      },
     );
     return ListingDetail.fromJson(json);
   }

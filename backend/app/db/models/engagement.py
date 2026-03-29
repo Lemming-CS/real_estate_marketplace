@@ -26,6 +26,29 @@ class Favorite(TimestampMixin, Base):
     listing: Mapped["Listing"] = relationship()
 
 
+class ListingView(TimestampMixin, Base):
+    __tablename__ = "listing_views"
+    __table_args__ = (
+        UniqueConstraint("listing_id", "user_id", name="uq_listing_views_listing_user"),
+        UniqueConstraint("listing_id", "guest_token", name="uq_listing_views_listing_guest"),
+        Index("ix_listing_views_listing_id_last_viewed_at", "listing_id", "last_viewed_at"),
+        Index("ix_listing_views_user_id", "user_id"),
+        Index("ix_listing_views_guest_token", "guest_token"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    listing_id: Mapped[int] = mapped_column(ForeignKey("listings.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    guest_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    last_viewed_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+    listing: Mapped["Listing"] = relationship()
+    user: Mapped["User | None"] = relationship()
+
+
 class Notification(TimestampMixin, Base):
     __tablename__ = "notifications"
     __table_args__ = (Index("ix_notifications_user_id_status_created_at", "user_id", "status", "created_at"),)

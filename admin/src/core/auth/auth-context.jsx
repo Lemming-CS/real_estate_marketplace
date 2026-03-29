@@ -24,6 +24,14 @@ export function AuthProvider({ children }) {
   const [session, setSession] = useState(() => readStoredSession());
   const [currentUser, setCurrentUser] = useState(null);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
+  const [authMessage, setAuthMessage] = useState('');
+
+  function clearLocalSession({ message = '' } = {}) {
+    window.localStorage.removeItem(AUTH_STORAGE_KEY);
+    setSession(null);
+    setCurrentUser(null);
+    setAuthMessage(message);
+  }
 
   useEffect(() => {
     async function bootstrap() {
@@ -41,9 +49,7 @@ export function AuthProvider({ children }) {
         setSession(stored);
         setCurrentUser(user);
       } catch {
-        window.localStorage.removeItem(AUTH_STORAGE_KEY);
-        setSession(null);
-        setCurrentUser(null);
+        clearLocalSession();
       } finally {
         setIsBootstrapping(false);
       }
@@ -59,7 +65,9 @@ export function AuthProvider({ children }) {
       refreshToken: session?.refreshToken ?? null,
       isAuthenticated: Boolean(session?.accessToken && currentUser),
       isBootstrapping,
+      authMessage,
       async login({ email, password }) {
+        setAuthMessage('');
         const response = await apiRequest('/admin/auth/login', {
           method: 'POST',
           body: { email, password },
@@ -90,24 +98,38 @@ export function AuthProvider({ children }) {
           }
         }
 
-        window.localStorage.removeItem(AUTH_STORAGE_KEY);
-        setSession(null);
-        setCurrentUser(null);
+        clearLocalSession();
       },
       async authenticatedRequest(path, options = {}) {
         if (!session?.accessToken) {
           throw new Error('No active session.');
         }
-        return apiRequest(path, { ...options, token: session.accessToken });
+        try {
+          return await apiRequest(path, { ...options, token: session.accessToken });
+        } catch (error) {
+          if (isApiError(error) && error.status === 401) {
+            clearLocalSession({ message: 'Session expired, please sign in again' });
+            throw new Error('Session expired, please sign in again');
+          }
+          throw error;
+        }
       },
       async authenticatedBlobRequest(path, options = {}) {
         if (!session?.accessToken) {
           throw new Error('No active session.');
         }
-        return apiBlobRequest(path, { ...options, token: session.accessToken });
+        try {
+          return await apiBlobRequest(path, { ...options, token: session.accessToken });
+        } catch (error) {
+          if (isApiError(error) && error.status === 401) {
+            clearLocalSession({ message: 'Session expired, please sign in again' });
+            throw new Error('Session expired, please sign in again');
+          }
+          throw error;
+        }
       },
     }),
-    [currentUser, isBootstrapping, session],
+    [authMessage, currentUser, isBootstrapping, session],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

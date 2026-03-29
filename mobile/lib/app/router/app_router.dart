@@ -20,9 +20,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
-  final isAuthenticated = ref.watch(
-    authControllerProvider.select((state) => state.isAuthenticated),
-  );
+  final authState = ref.watch(authControllerProvider);
+  final isAuthenticated = authState.isAuthenticated;
+  final sessionExpired =
+      authState.error == 'Session expired, please sign in again';
+  bool isAuthPage(String location) {
+    return location == '/login' ||
+        location == '/register' ||
+        location == '/forgot-password';
+  }
+
+  bool shouldRedirectToLogin(String location) {
+    return sessionExpired && !isAuthPage(location);
+  }
+
   bool requiresAuth(String location) {
     return location == '/favorites' ||
         location == '/my-listings' ||
@@ -42,6 +53,10 @@ final routerProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final location = state.matchedLocation;
       final authPages = {'/login', '/register'};
+
+      if (shouldRedirectToLogin(location)) {
+        return '/login';
+      }
 
       if (location == '/forgot-password') {
         return null;

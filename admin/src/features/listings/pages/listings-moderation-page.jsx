@@ -76,6 +76,8 @@ export function ListingsModerationPage() {
                   <th>Location</th>
                   <th>Seller</th>
                   <th>Price</th>
+                  <th>Favorites</th>
+                  <th>Views</th>
                   <th />
                 </tr>
             </thead>
@@ -90,6 +92,8 @@ export function ListingsModerationPage() {
                   <td>{[listing.district, listing.city].filter(Boolean).join(', ')}</td>
                   <td>{listing.seller.full_name}</td>
                   <td>{listing.price_amount} {listing.currency_code}</td>
+                  <td>{listing.favorites_count}</td>
+                  <td>{listing.view_count}</td>
                   <td className="table-actions">
                     <Link
                       className="secondary-button"

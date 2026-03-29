@@ -60,7 +60,9 @@ export function LoginPage() {
             />
           </label>
 
-          {errorMessage ? <div className="form-error">{errorMessage}</div> : null}
+          {auth.authMessage || errorMessage ? (
+            <div className="form-error">{auth.authMessage || errorMessage}</div>
+          ) : null}
 
           <button className="primary-button" type="submit" disabled={isSubmitting}>
             {isSubmitting ? 'Signing in…' : 'Sign In'}

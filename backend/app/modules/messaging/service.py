@@ -521,7 +521,7 @@ def _message_preview(message: Message | None) -> str | None:
 
 def _safe_display_name(filename: str | None) -> str:
     original = Path(filename or "attachment").name
-    cleaned = re.sub(r"[^A-Za-z0-9._ -]", "_", original).strip(" .")
+    cleaned = re.sub(r"[^\w.\- ]+", "_", original, flags=re.UNICODE).strip(" ._")
     return cleaned or "attachment"
 
 

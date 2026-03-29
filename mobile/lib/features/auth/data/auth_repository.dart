@@ -61,8 +61,11 @@ class AuthRepository {
   }
 
   Future<AuthUser> fetchCurrentUser(String accessToken) async {
-    final json =
-        await _client.getJson(ApiEndpoints.authMe, accessToken: accessToken);
+    final json = await _client.getJson(
+      ApiEndpoints.authMe,
+      accessToken: accessToken,
+      notifyOnUnauthorized: false,
+    );
     return AuthUser.fromJson(json);
   }
 
@@ -74,6 +77,7 @@ class AuthRepository {
       ApiEndpoints.authLogout,
       accessToken: accessToken,
       body: {'refresh_token': refreshToken},
+      notifyOnUnauthorized: false,
     );
   }
 }

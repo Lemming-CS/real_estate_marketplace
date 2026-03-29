@@ -1,4 +1,5 @@
 import 'package:electronics_marketplace_mobile/core/localization/app_locale_controller.dart';
+import 'package:electronics_marketplace_mobile/core/storage/guest_token_storage.dart';
 import 'package:electronics_marketplace_mobile/features/auth/presentation/controllers/auth_controller.dart';
 import 'package:electronics_marketplace_mobile/features/listings/data/categories_repository.dart';
 import 'package:electronics_marketplace_mobile/features/listings/data/listings_repository.dart';
@@ -39,10 +40,13 @@ final listingDetailProvider = FutureProvider.autoDispose
     .family<ListingDetail, String>((ref, listingId) async {
   final locale = ref.watch(appLocaleControllerProvider).languageCode;
   final token = ref.watch(authControllerProvider).session?.accessToken;
+  final guestToken =
+      token == null ? await ref.watch(guestTokenProvider.future) : null;
   return ref.watch(listingsRepositoryProvider).getListingDetail(
         listingId: listingId,
         locale: locale,
         accessToken: token,
+        guestToken: guestToken,
       );
 });
 

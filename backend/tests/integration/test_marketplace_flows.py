@@ -28,6 +28,7 @@ from app.db.models import (
     Listing,
     ListingAttributeValue,
     ListingMedia,
+    ListingView,
     Message,
     PaymentRecord,
     Promotion,
@@ -683,6 +684,121 @@ def test_favorites_add_remove_list_and_unavailable_listing_handling(test_environ
     remove_response = client.delete(f"/api/v1/favorites/{listing.public_id}", headers=buyer_headers)
     assert remove_response.status_code == 200
     assert remove_response.json()["is_favorited"] is False
+
+
+def test_listing_counters_are_exposed_and_views_are_deduplicated_by_viewer(test_environment):
+    client = test_environment["client"]
+    session_factory = test_environment["session_factory"]
+
+    with session_factory() as session:
+        category = _create_category_with_attributes(session)
+        seller = _create_user(
+            session,
+            email="seller.counters@example.com",
+            username="seller_counters",
+            roles=[RoleCode.USER, RoleCode.SELLER],
+        )
+        buyer = _create_user(
+            session,
+            email="buyer.counters@example.com",
+            username="buyer_counters",
+            roles=[RoleCode.USER],
+        )
+        second_buyer = _create_user(
+            session,
+            email="buyer.second.counters@example.com",
+            username="buyer_second_counters",
+            roles=[RoleCode.USER],
+        )
+        listing = _create_published_listing(
+            session,
+            seller=seller,
+            category=category,
+            title="Family house with garden",
+            description="Spacious family house listing with garden, parking, and recent renovations in a quiet area.",
+            price_amount="145000.00",
+            city="Bishkek",
+            purpose=ListingPurpose.SALE,
+            property_type=PropertyType.HOUSE,
+            bathrooms_value="2",
+            heating_option="gas",
+        )
+        session.add(Favorite(user_id=buyer.id, listing_id=listing.id))
+        session.commit()
+
+    seller_headers = _auth_headers(
+        _access_token_for_user(seller, roles=[RoleCode.USER, RoleCode.SELLER])
+    )
+    buyer_headers = _auth_headers(_access_token_for_user(buyer, roles=[RoleCode.USER]))
+    second_buyer_headers = _auth_headers(
+        _access_token_for_user(second_buyer, roles=[RoleCode.USER])
+    )
+
+    feed_response = client.get("/api/v1/listings")
+    assert feed_response.status_code == 200
+    assert feed_response.json()["items"][0]["favorites_count"] == 1
+    assert feed_response.json()["items"][0]["view_count"] == 0
+
+    owner_detail = client.get(
+        f"/api/v1/listings/{listing.public_id}",
+        headers=seller_headers,
+    )
+    assert owner_detail.status_code == 200
+    assert owner_detail.json()["favorites_count"] == 1
+    assert owner_detail.json()["view_count"] == 0
+
+    buyer_detail = client.get(
+        f"/api/v1/listings/{listing.public_id}",
+        headers=buyer_headers,
+    )
+    assert buyer_detail.status_code == 200
+    assert buyer_detail.json()["favorites_count"] == 1
+    assert buyer_detail.json()["view_count"] == 1
+
+    buyer_detail_repeat = client.get(
+        f"/api/v1/listings/{listing.public_id}",
+        headers=buyer_headers,
+    )
+    assert buyer_detail_repeat.status_code == 200
+    assert buyer_detail_repeat.json()["view_count"] == 1
+
+    first_guest_detail = client.get(
+        f"/api/v1/listings/{listing.public_id}",
+        headers={"X-Guest-Token": "guest-a"},
+    )
+    assert first_guest_detail.status_code == 200
+    assert first_guest_detail.json()["view_count"] == 2
+
+    repeated_guest_detail = client.get(
+        f"/api/v1/listings/{listing.public_id}",
+        headers={"X-Guest-Token": "guest-a"},
+    )
+    assert repeated_guest_detail.status_code == 200
+    assert repeated_guest_detail.json()["view_count"] == 2
+
+    second_guest_detail = client.get(
+        f"/api/v1/listings/{listing.public_id}",
+        headers={"X-Guest-Token": "guest-b"},
+    )
+    assert second_guest_detail.status_code == 200
+    assert second_guest_detail.json()["view_count"] == 3
+
+    second_buyer_detail = client.get(
+        f"/api/v1/listings/{listing.public_id}",
+        headers=second_buyer_headers,
+    )
+    assert second_buyer_detail.status_code == 200
+    assert second_buyer_detail.json()["view_count"] == 4
+
+    with session_factory() as session:
+        listing_row = session.query(Listing).filter(Listing.public_id == listing.public_id).one()
+        assert listing_row.view_count == 4
+        assert (
+            session.query(ListingView)
+            .filter(ListingView.listing_id == listing_row.id)
+            .count()
+            == 3
+        )
 
 
 def test_invalid_discovery_filters_return_422_across_listing_routes(test_environment):

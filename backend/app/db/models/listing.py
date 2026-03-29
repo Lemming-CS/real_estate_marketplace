@@ -82,6 +82,7 @@ class Listing(PublicIdMixin, SoftDeleteMixin, TimestampMixin, Base):
     floor: Mapped[int | None] = mapped_column(Integer, nullable=True)
     total_floors: Mapped[int | None] = mapped_column(Integer, nullable=True)
     furnished: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    view_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     moderation_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 

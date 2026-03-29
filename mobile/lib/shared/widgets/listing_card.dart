@@ -122,6 +122,21 @@ class ListingCard extends StatelessWidget {
                               .join(', '),
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 12,
+                          runSpacing: 6,
+                          children: [
+                            _CounterChip(
+                              icon: Icons.favorite_border,
+                              label: '${listing.favoritesCount}',
+                            ),
+                            _CounterChip(
+                              icon: Icons.visibility_outlined,
+                              label: '${listing.viewCount}',
+                            ),
+                          ],
+                        ),
                       ],
                     ),
                   ),
@@ -130,6 +145,37 @@ class ListingCard extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CounterChip extends StatelessWidget {
+  const _CounterChip({
+    required this.icon,
+    required this.label,
+  });
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16),
+            const SizedBox(width: 6),
+            Text(label),
+          ],
         ),
       ),
     );

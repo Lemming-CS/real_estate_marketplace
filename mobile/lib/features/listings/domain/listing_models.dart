@@ -229,6 +229,8 @@ class ListingSummary {
     required this.category,
     required this.seller,
     required this.isPromoted,
+    required this.favoritesCount,
+    required this.viewCount,
     this.promotionState,
     this.district,
     this.mapLabel,
@@ -258,6 +260,8 @@ class ListingSummary {
   final ListingCategorySummary category;
   final SellerSummary seller;
   final ListingMedia? primaryMedia;
+  final int favoritesCount;
+  final int viewCount;
   final bool isPromoted;
   final ListingPromotionState? promotionState;
 
@@ -286,6 +290,8 @@ class ListingSummary {
             ? null
             : ListingMedia.fromJson(
                 json['primary_media'] as Map<String, dynamic>),
+        favoritesCount: parseInt(json['favorites_count']) ?? 0,
+        viewCount: parseInt(json['view_count']) ?? 0,
         isPromoted: json['is_promoted'] as bool? ?? false,
         promotionState: json['promotion_state'] == null
             ? null
@@ -312,6 +318,8 @@ class ListingDetail extends ListingSummary {
     required super.category,
     required super.seller,
     required super.isPromoted,
+    required super.favoritesCount,
+    required super.viewCount,
     required this.description,
     required this.addressText,
     required this.owner,
@@ -359,6 +367,8 @@ class ListingDetail extends ListingSummary {
             ? null
             : ListingMedia.fromJson(
                 json['primary_media'] as Map<String, dynamic>),
+        favoritesCount: parseInt(json['favorites_count']) ?? 0,
+        viewCount: parseInt(json['view_count']) ?? 0,
         isPromoted: json['is_promoted'] as bool? ?? false,
         promotionState: json['promotion_state'] == null
             ? null

@@ -80,6 +80,21 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
                     ?.copyWith(fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 8),
+              Wrap(
+                spacing: 12,
+                runSpacing: 8,
+                children: [
+                  _InfoChip(
+                    label:
+                        '${context.tr('Favorites', 'Избранное')}: ${listing.favoritesCount}',
+                  ),
+                  _InfoChip(
+                    label:
+                        '${context.tr('Views', 'Просмотры')}: ${listing.viewCount}',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
               if (_ownerStatusMessage(authState, listing)
                   case final ownerMessage?) ...[
                 Card(
