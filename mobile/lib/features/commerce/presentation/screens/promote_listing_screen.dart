@@ -29,7 +29,6 @@ class _PromoteListingScreenState extends ConsumerState<PromoteListingScreen> {
   bool _isSubmitting = false;
   String? _error;
   PromotionInitiationResult? _initiated;
-  PaymentSimulationResult? _completed;
 
   @override
   void dispose() {
@@ -41,6 +40,7 @@ class _PromoteListingScreenState extends ConsumerState<PromoteListingScreen> {
   Widget build(BuildContext context) {
     final detailAsync = ref.watch(listingDetailProvider(widget.listingId));
     final packagesAsync = ref.watch(promotionPackagesProvider);
+    final promotionsAsync = ref.watch(promotionsProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -84,6 +84,23 @@ class _PromoteListingScreenState extends ConsumerState<PromoteListingScreen> {
               _durationDays = _durationDays == 0
                   ? selectedPackage.durationDays
                   : _durationDays;
+              final matchingPromotions = promotionsAsync.valueOrNull?.items
+                      .where((item) => item.listingPublicId == listing.publicId)
+                      .where(
+                        (item) =>
+                            item.status == 'pending_payment' ||
+                            item.status == 'active',
+                      )
+                      .toList() ??
+                  const <PromotionRecord>[];
+              final blockingPromotion =
+                  matchingPromotions.isEmpty ? null : matchingPromotions.first;
+              final hasActivePromotion =
+                  listing.isPromoted || blockingPromotion?.status == 'active';
+              final hasPendingPromotionPayment =
+                  blockingPromotion?.status == 'pending_payment';
+              final isPromotionBlocked =
+                  hasActivePromotion || hasPendingPromotionPayment;
 
               return ListView(
                 padding: const EdgeInsets.all(16),
@@ -100,6 +117,47 @@ class _PromoteListingScreenState extends ConsumerState<PromoteListingScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
+                  if (hasActivePromotion || hasPendingPromotionPayment) ...[
+                    Card(
+                      color: Theme.of(context).colorScheme.secondaryContainer,
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              hasActivePromotion
+                                  ? context.tr(
+                                      'Listing is already promoted.',
+                                      'Объявление уже продвигается.',
+                                    )
+                                  : context.tr(
+                                      'A promotion payment is already pending for this listing.',
+                                      'Для этого объявления уже есть ожидающий платеж на продвижение.',
+                                    ),
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.w800),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              hasActivePromotion
+                                  ? context.tr(
+                                      'You cannot create another promotion payment while the current promotion is active.',
+                                      'Нельзя создавать новый платеж на продвижение, пока текущее продвижение активно.',
+                                    )
+                                  : context.tr(
+                                      'Wait until the current pending payment is completed or cancelled before trying again.',
+                                      'Дождитесь завершения или отмены текущего ожидающего платежа перед новой попыткой.',
+                                    ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   if (_error != null) ...[
                     Card(
                       color: Theme.of(context).colorScheme.errorContainer,
@@ -136,7 +194,6 @@ class _PromoteListingScreenState extends ConsumerState<PromoteListingScreen> {
                               _durationDays = package.durationDays;
                               _error = null;
                               _initiated = null;
-                              _completed = null;
                             });
                           },
                   ),
@@ -195,7 +252,9 @@ class _PromoteListingScreenState extends ConsumerState<PromoteListingScreen> {
                   ),
                   const SizedBox(height: 16),
                   FilledButton(
-                    onPressed: _isSubmitting ? null : _initiatePromotion,
+                    onPressed: _isSubmitting || isPromotionBlocked
+                        ? null
+                        : _initiatePromotion,
                     child: Text(
                       _isSubmitting
                           ? context.tr('Processing...', 'Обрабатываем...')
@@ -223,42 +282,12 @@ class _PromoteListingScreenState extends ConsumerState<PromoteListingScreen> {
                               '${_initiated!.priceBreakdown.totalAmount} ${_initiated!.priceBreakdown.currencyCode}',
                             ),
                             const SizedBox(height: 12),
-                            FilledButton.tonal(
-                              onPressed: _isSubmitting ||
-                                      _initiated!.payment.checkoutUrl == null
-                                  ? null
-                                  : _completeMockPayment,
-                              child: Text(
-                                context.tr(
-                                  'Complete mock payment',
-                                  'Завершить mock-платеж',
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                  if (_completed != null) ...[
-                    const SizedBox(height: 20),
-                    Card(
-                      color: Theme.of(context).colorScheme.primaryContainer,
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
                             Text(
                               context.tr(
-                                'Promotion status updated.',
-                                'Статус продвижения обновлен.',
+                                'Payment is pending. Completion is not available from the marketplace app.',
+                                'Платеж ожидает обработки. Завершение недоступно из мобильного приложения маркетплейса.',
                               ),
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              '${context.tr('Payment', 'Платеж')}: ${_completed!.payment.status}\n${context.tr('Promotion', 'Продвижение')}: ${_completed!.promotion?.status ?? '-'}',
+                              style: Theme.of(context).textTheme.bodySmall,
                             ),
                           ],
                         ),
@@ -287,7 +316,6 @@ class _PromoteListingScreenState extends ConsumerState<PromoteListingScreen> {
     setState(() {
       _isSubmitting = true;
       _error = null;
-      _completed = null;
     });
     try {
       final initiated =
@@ -305,40 +333,6 @@ class _PromoteListingScreenState extends ConsumerState<PromoteListingScreen> {
       setState(() => _initiated = initiated);
       ref.invalidate(paymentsProvider);
       ref.invalidate(promotionsProvider);
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      setState(() => _error = error.toString());
-    } finally {
-      if (mounted) {
-        setState(() => _isSubmitting = false);
-      }
-    }
-  }
-
-  Future<void> _completeMockPayment() async {
-    final authState = ref.read(authControllerProvider);
-    final token = authState.session?.accessToken;
-    final checkoutUrl = _initiated?.payment.checkoutUrl;
-    if (token == null || checkoutUrl == null) {
-      return;
-    }
-    setState(() => _isSubmitting = true);
-    try {
-      final result =
-          await ref.read(commerceRepositoryProvider).completeMockCheckout(
-                accessToken: token,
-                checkoutUrl: checkoutUrl,
-              );
-      if (!mounted) {
-        return;
-      }
-      setState(() => _completed = result);
-      ref.invalidate(paymentsProvider);
-      ref.invalidate(promotionsProvider);
-      ref.invalidate(homeListingsProvider);
-      ref.invalidate(myListingsProvider);
       ref.invalidate(listingDetailProvider(widget.listingId));
     } catch (error) {
       if (!mounted) {

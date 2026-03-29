@@ -308,11 +308,18 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
                           context.tr('Mark as sold', 'Отметить как проданное'),
                         ),
                       ),
-                    if (listing.status == 'published')
+                    if (listing.status == 'published' && !listing.isPromoted)
                       FilledButton.tonal(
                         onPressed: () => context
                             .push('/promote-listing/${listing.publicId}'),
                         child: Text(context.tr('Promote', 'Продвинуть')),
+                      ),
+                    if (listing.status == 'published' && listing.isPromoted)
+                      FilledButton.tonal(
+                        onPressed: null,
+                        child: Text(
+                          context.tr('Already promoted', 'Уже продвигается'),
+                        ),
                       ),
                     OutlinedButton(
                       onPressed: _ownerActionBusy

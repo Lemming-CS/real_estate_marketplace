@@ -237,11 +237,18 @@ def initiate_promotion_payment(
         .order_by(Promotion.created_at.desc(), Promotion.id.desc())
     ).scalars().all()
     for promotion in existing:
-        if _effective_promotion_status(promotion) in {PromotionStatus.PENDING_PAYMENT, PromotionStatus.ACTIVE}:
+        effective_status = _effective_promotion_status(promotion)
+        if effective_status == PromotionStatus.PENDING_PAYMENT:
             raise AppError(
                 status_code=409,
-                code="promotion_already_exists",
-                message="This listing already has a pending or active promotion.",
+                code="promotion_payment_pending",
+                message="This listing already has a pending promotion payment.",
+            )
+        if effective_status == PromotionStatus.ACTIVE:
+            raise AppError(
+                status_code=409,
+                code="promotion_already_active",
+                message="This listing is already promoted.",
             )
 
     if payload.duration_days % package.duration_days != 0:
@@ -295,7 +302,7 @@ def initiate_promotion_payment(
 
     return PaymentInitiationResponseSchema(
         payment=_build_payment_schema(settings=settings, payment=payment, promotion=promotion),
-        promotion=_build_promotion_schema(promotion),
+        promotion=_build_promotion_schema(promotion, locale=actor.locale),
         price_breakdown=PaymentPriceBreakdownSchema(
             base_duration_days=package.duration_days,
             selected_duration_days=payload.duration_days,
@@ -325,7 +332,7 @@ def simulate_payment_result(
                 _activate_promotion(session, promotion=promotion, payment=payment)
             return PaymentSimulationResponseSchema(
                 payment=_build_payment_schema(settings=settings, payment=payment, promotion=promotion),
-                promotion=_build_promotion_schema(promotion) if promotion else None,
+                promotion=_build_promotion_schema(promotion, locale=actor.locale) if promotion else None,
             )
         if payment.status != PaymentStatus.PENDING:
             raise AppError(status_code=409, code="invalid_payment_transition", message="Payment cannot be marked successful.")
@@ -350,7 +357,7 @@ def simulate_payment_result(
         if payment.status == PaymentStatus.FAILED:
             return PaymentSimulationResponseSchema(
                 payment=_build_payment_schema(settings=settings, payment=payment, promotion=promotion),
-                promotion=_build_promotion_schema(promotion) if promotion else None,
+                promotion=_build_promotion_schema(promotion, locale=actor.locale) if promotion else None,
             )
         if payment.status != PaymentStatus.PENDING:
             raise AppError(status_code=409, code="invalid_payment_transition", message="Payment cannot be marked failed.")
@@ -364,7 +371,7 @@ def simulate_payment_result(
         if payment.status == PaymentStatus.CANCELLED:
             return PaymentSimulationResponseSchema(
                 payment=_build_payment_schema(settings=settings, payment=payment, promotion=promotion),
-                promotion=_build_promotion_schema(promotion) if promotion else None,
+                promotion=_build_promotion_schema(promotion, locale=actor.locale) if promotion else None,
             )
         if payment.status != PaymentStatus.PENDING:
             raise AppError(status_code=409, code="invalid_payment_transition", message="Payment cannot be cancelled.")
@@ -377,7 +384,7 @@ def simulate_payment_result(
         if payment.status == PaymentStatus.REFUNDED_READY:
             return PaymentSimulationResponseSchema(
                 payment=_build_payment_schema(settings=settings, payment=payment, promotion=promotion),
-                promotion=_build_promotion_schema(promotion) if promotion else None,
+                promotion=_build_promotion_schema(promotion, locale=actor.locale) if promotion else None,
             )
         if payment.status != PaymentStatus.SUCCESSFUL:
             raise AppError(
@@ -394,7 +401,7 @@ def simulate_payment_result(
     session.flush()
     return PaymentSimulationResponseSchema(
         payment=_build_payment_schema(settings=settings, payment=payment, promotion=promotion),
-        promotion=_build_promotion_schema(promotion) if promotion else None,
+        promotion=_build_promotion_schema(promotion, locale=actor.locale) if promotion else None,
     )
 
 
@@ -441,7 +448,7 @@ def list_my_promotions(
         base_query.offset((page - 1) * page_size).limit(page_size)
     ).unique().scalars().all()
     return PaginatedPromotionsResponseSchema(
-        items=[_build_promotion_schema(promotion) for promotion in promotions],
+        items=[_build_promotion_schema(promotion, locale=user.locale) for promotion in promotions],
         meta=_pagination_meta(page=page, page_size=page_size, total_items=total_items),
     )
 
@@ -672,9 +679,9 @@ def _build_package_schema(package: PromotionPackage) -> PromotionPackageSchema:
     )
 
 
-def _build_promotion_schema(promotion: Promotion) -> PromotionSummarySchema:
+def _build_promotion_schema(promotion: Promotion, *, locale: str = "en") -> PromotionSummarySchema:
     target_category = promotion.target_category
-    target_translation = _category_translation_name(target_category) if target_category else None
+    target_translation = _category_translation_name(target_category, locale=locale) if target_category else None
     return PromotionSummarySchema(
         public_id=promotion.public_id,
         listing_public_id=promotion.listing.public_id,
@@ -733,11 +740,11 @@ def _mock_checkout_url(*, settings: Settings, payment: PaymentRecord) -> str:
     return f"{base_url}/payments/{payment.public_id}/checkout?result=successful"
 
 
-def _category_translation_name(category: Category | None) -> str | None:
+def _category_translation_name(category: Category | None, *, locale: str = "en") -> str | None:
     if category is None:
         return None
     translations = {translation.locale: translation for translation in category.translations}
-    translation = translations.get("en") or next(iter(category.translations), None)
+    translation = translations.get(locale) or translations.get("en") or next(iter(category.translations), None)
     return translation.name if translation else category.internal_name
 
 

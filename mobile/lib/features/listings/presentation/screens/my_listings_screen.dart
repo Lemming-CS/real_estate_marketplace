@@ -84,6 +84,7 @@ class MyListingsScreen extends ConsumerWidget {
                     onTap: () => context.push('/listing/${listing.publicId}'),
                     trailing: _ListingActionsMenu(
                       status: listing.status,
+                      isPromoted: listing.isPromoted,
                       onSelected: (action) async {
                         final token = authState.session!.accessToken;
                         final repository = ref.read(listingsRepositoryProvider);
@@ -208,10 +209,12 @@ class MyListingsScreen extends ConsumerWidget {
 class _ListingActionsMenu extends StatelessWidget {
   const _ListingActionsMenu({
     required this.status,
+    required this.isPromoted,
     required this.onSelected,
   });
 
   final String status;
+  final bool isPromoted;
   final ValueChanged<String> onSelected;
 
   @override
@@ -245,7 +248,7 @@ class _ListingActionsMenu extends StatelessWidget {
               value: 'edit',
               child: Text(context.tr('Edit', 'Редактировать')),
             ),
-            if (status == 'published')
+            if (status == 'published' && !isPromoted)
               PopupMenuItem(
                 value: 'promote',
                 child: Text(context.tr('Promote', 'Продвинуть')),

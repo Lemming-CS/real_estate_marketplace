@@ -121,7 +121,7 @@ class AppTheme {
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: surface,
-        height: 76,
+        height: 80,
         indicatorColor: const Color(0xFFE4F0EF),
         iconTheme: WidgetStateProperty.resolveWith(
           (states) => IconThemeData(
@@ -130,6 +130,8 @@ class AppTheme {
         ),
         labelTextStyle: WidgetStateProperty.resolveWith(
           (states) => baseTheme.textTheme.labelMedium?.copyWith(
+            fontSize: 11,
+            height: 1.05,
             color: states.contains(WidgetState.selected) ? primary : textMuted,
             fontWeight: states.contains(WidgetState.selected)
                 ? FontWeight.w700

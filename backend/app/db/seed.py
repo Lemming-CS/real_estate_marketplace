@@ -856,9 +856,9 @@ def seed_demo_data() -> None:
         )
 
         for category, en_name, ru_name in [
-            (real_estate, "Real Estate", "Nedvizhimost"),
-            (apartments, "Apartments", "Kvartiry"),
-            (houses, "Houses", "Doma"),
+            (real_estate, "Real Estate", "Недвижимость"),
+            (apartments, "Apartments", "Квартиры"),
+            (houses, "Houses", "Дома"),
         ]:
             upsert_category_translation(
                 session,
@@ -872,7 +872,7 @@ def seed_demo_data() -> None:
                 category=category,
                 locale="ru",
                 name=ru_name,
-                description=f"{ru_name} ob" "yavleniya",
+                description=f"{ru_name} объявления",
             )
 
         apartment_bathrooms = get_or_create_category_attribute(

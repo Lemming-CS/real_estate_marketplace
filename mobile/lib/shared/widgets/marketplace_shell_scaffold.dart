@@ -49,7 +49,7 @@ class MarketplaceShellScaffold extends StatelessWidget {
               label: context.tr('Favorites', 'Избранное')),
           NavigationDestination(
               icon: const Icon(Icons.apartment_outlined),
-              label: context.tr('My listings', 'Мои объявления')),
+              label: context.tr('My listings', 'Мои объекты')),
           NavigationDestination(
               icon: const Icon(Icons.add_business_outlined),
               label: context.tr('Create', 'Создать')),
