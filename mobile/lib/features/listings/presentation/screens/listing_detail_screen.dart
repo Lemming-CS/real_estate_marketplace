@@ -69,6 +69,8 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
                 items: listing.mediaItems,
                 pageIndex: _pageIndex,
                 onPageChanged: (index) => setState(() => _pageIndex = index),
+                onImageTap: (media) =>
+                    _openImageViewer(listing.mediaItems, media),
               ),
               const SizedBox(height: 16),
               Text(listing.title,
@@ -433,7 +435,8 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
     }
   }
 
-  Future<void> _deleteListing(AuthState authState, ListingDetail listing) async {
+  Future<void> _deleteListing(
+      AuthState authState, ListingDetail listing) async {
     final session = authState.session;
     if (session == null) {
       return;
@@ -497,6 +500,25 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
       }
     }
   }
+
+  void _openImageViewer(List<ListingMedia> items, ListingMedia selectedMedia) {
+    final imageItems =
+        items.where((item) => !item.isVideo).toList(growable: false);
+    final initialIndex = imageItems.indexWhere(
+      (item) => item.publicId == selectedMedia.publicId,
+    );
+    if (imageItems.isEmpty || initialIndex < 0) {
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => _ListingImageViewerScreen(
+          items: imageItems,
+          initialIndex: initialIndex,
+        ),
+      ),
+    );
+  }
 }
 
 class _ListingFavoriteAction extends ConsumerWidget {
@@ -556,11 +578,13 @@ class _MediaGallery extends StatelessWidget {
     required this.items,
     required this.pageIndex,
     required this.onPageChanged,
+    required this.onImageTap,
   });
 
   final List<ListingMedia> items;
   final int pageIndex;
   final ValueChanged<int> onPageChanged;
+  final ValueChanged<ListingMedia> onImageTap;
 
   @override
   Widget build(BuildContext context) {
@@ -604,27 +628,49 @@ class _MediaGallery extends StatelessWidget {
                   ),
                 );
               }
-              return Stack(
-                children: [
-                  NetworkMediaImage(
-                    assetKey: item.assetKey,
-                    height: 240,
-                    width: double.infinity,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  if (item.isVideo)
-                    const Positioned(
+              return GestureDetector(
+                onTap: () => onImageTap(item),
+                child: Stack(
+                  children: [
+                    NetworkMediaImage(
+                      assetKey: item.assetKey,
+                      height: 240,
+                      width: double.infinity,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    Positioned(
                       right: 12,
                       bottom: 12,
-                      child: CircleAvatar(
-                        backgroundColor: Colors.black54,
-                        child: Icon(
-                          Icons.play_arrow,
-                          color: Colors.white,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.fullscreen,
+                                color: Colors.white,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                context.tr('Open', 'Открыть'),
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
-                ],
+                  ],
+                ),
               );
             },
           ),
@@ -650,6 +696,76 @@ class _MediaGallery extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+class _ListingImageViewerScreen extends StatefulWidget {
+  const _ListingImageViewerScreen({
+    required this.items,
+    required this.initialIndex,
+  });
+
+  final List<ListingMedia> items;
+  final int initialIndex;
+
+  @override
+  State<_ListingImageViewerScreen> createState() =>
+      _ListingImageViewerScreenState();
+}
+
+class _ListingImageViewerScreenState extends State<_ListingImageViewerScreen> {
+  late final PageController _pageController;
+  late int _pageIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageIndex = widget.initialIndex;
+    _pageController = PageController(initialPage: widget.initialIndex);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        title: Text(
+          '${_pageIndex + 1}/${widget.items.length}',
+          style: theme.textTheme.titleMedium?.copyWith(color: Colors.white),
+        ),
+      ),
+      body: PageView.builder(
+        controller: _pageController,
+        itemCount: widget.items.length,
+        onPageChanged: (index) {
+          setState(() => _pageIndex = index);
+        },
+        itemBuilder: (context, index) {
+          final item = widget.items[index];
+          return InteractiveViewer(
+            minScale: 1,
+            maxScale: 4,
+            child: Center(
+              child: NetworkMediaImage(
+                assetKey: item.assetKey,
+                fit: BoxFit.contain,
+                width: double.infinity,
+                height: double.infinity,
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 }

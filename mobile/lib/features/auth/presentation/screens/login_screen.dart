@@ -42,6 +42,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           icon: const Icon(Icons.arrow_back),
           tooltip: context.tr('Back', 'Назад'),
         ),
+        actions: [
+          IconButton(
+            onPressed: () => context.go('/'),
+            icon: const Icon(Icons.home_outlined),
+            tooltip: context.tr('Home', 'Главная'),
+          ),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(20),

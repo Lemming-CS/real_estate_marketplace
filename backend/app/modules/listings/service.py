@@ -475,7 +475,13 @@ def upload_listing_media(
         allowed_mime_types=ALLOWED_LISTING_MEDIA_MIME_TYPES,
         max_size_bytes=max_size_bytes,
     )
+    max_sort_order = session.execute(
+        select(func.max(ListingMedia.sort_order)).where(
+            ListingMedia.listing_id == listing.id
+        )
+    ).scalar_one()
 
+    next_sort_order = (max_sort_order if max_sort_order is not None else -1) + 1
     existing_images = [item for item in active_media if item.media_type == MediaType.IMAGE]
     media = ListingMedia(
         listing_id=listing.id,
@@ -483,7 +489,7 @@ def upload_listing_media(
         storage_key=storage_key,
         mime_type=upload.content_type,
         file_size_bytes=file_size_bytes,
-        sort_order=(max([item.sort_order for item in active_media], default=-1) + 1),
+        sort_order=next_sort_order,
         is_primary=media_type == MediaType.IMAGE and not existing_images,
     )
     session.add(media)
