@@ -26,15 +26,128 @@ final categoriesProvider =
   return ref.watch(categoriesRepositoryProvider).getCategories(locale);
 });
 
+class HomeListingsState {
+  const HomeListingsState({
+    required this.items,
+    required this.meta,
+    this.isLoadingMore = false,
+    this.loadMoreError,
+  });
+
+  final List<ListingSummary> items;
+  final PaginationMeta meta;
+  final bool isLoadingMore;
+  final String? loadMoreError;
+
+  bool get hasMore => meta.page < meta.totalPages;
+
+  HomeListingsState copyWith({
+    List<ListingSummary>? items,
+    PaginationMeta? meta,
+    bool? isLoadingMore,
+    String? loadMoreError,
+    bool clearLoadMoreError = false,
+  }) {
+    return HomeListingsState(
+      items: items ?? this.items,
+      meta: meta ?? this.meta,
+      isLoadingMore: isLoadingMore ?? this.isLoadingMore,
+      loadMoreError:
+          clearLoadMoreError ? null : (loadMoreError ?? this.loadMoreError),
+    );
+  }
+
+  factory HomeListingsState.fromPage(ListingPage page) {
+    return HomeListingsState(
+      items: page.items,
+      meta: page.meta,
+    );
+  }
+}
+
 final homeListingsProvider =
-    FutureProvider.autoDispose<ListingPage>((ref) async {
-  final locale = ref.watch(appLocaleControllerProvider).languageCode;
-  final filters = ref.watch(homeListingFiltersProvider);
-  return ref.watch(listingsRepositoryProvider).getHomeFeed(
-        filters: filters,
-        locale: locale,
+    AutoDisposeAsyncNotifierProvider<HomeListingsController, HomeListingsState>(
+        HomeListingsController.new);
+
+class HomeListingsController
+    extends AutoDisposeAsyncNotifier<HomeListingsState> {
+  late String _locale;
+  late ListingFilters _filters;
+
+  @override
+  Future<HomeListingsState> build() async {
+    _locale = ref.watch(appLocaleControllerProvider).languageCode;
+    _filters = ref.watch(homeListingFiltersProvider);
+    final page = await ref.watch(listingsRepositoryProvider).getHomeFeed(
+          filters: _filters.copyWith(page: 1),
+          locale: _locale,
+        );
+    return HomeListingsState.fromPage(page);
+  }
+
+  Future<void> refreshFeed() async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() async {
+      final page = await ref.read(listingsRepositoryProvider).getHomeFeed(
+            filters: _filters.copyWith(page: 1),
+            locale: _locale,
+          );
+      return HomeListingsState.fromPage(page);
+    });
+  }
+
+  Future<void> loadNextPage() async {
+    final current = state.valueOrNull;
+    if (current == null ||
+        state.isLoading ||
+        current.isLoadingMore ||
+        !current.hasMore) {
+      return;
+    }
+
+    state = AsyncData(
+      current.copyWith(
+        isLoadingMore: true,
+        clearLoadMoreError: true,
+      ),
+    );
+
+    final nextPageNumber = current.meta.page + 1;
+    try {
+      final nextPage = await ref.read(listingsRepositoryProvider).getHomeFeed(
+            filters: _filters.copyWith(page: nextPageNumber),
+            locale: _locale,
+          );
+      state = AsyncData(
+        HomeListingsState(
+          items: _mergeUniqueListings(current.items, nextPage.items),
+          meta: nextPage.meta,
+        ),
       );
-});
+    } catch (error) {
+      state = AsyncValue.data(
+        current.copyWith(
+          isLoadingMore: false,
+          loadMoreError: error.toString(),
+        ),
+      );
+    }
+  }
+
+  List<ListingSummary> _mergeUniqueListings(
+    List<ListingSummary> currentItems,
+    List<ListingSummary> nextItems,
+  ) {
+    final merged = <ListingSummary>[...currentItems];
+    final seen = currentItems.map((item) => item.publicId).toSet();
+    for (final item in nextItems) {
+      if (seen.add(item.publicId)) {
+        merged.add(item);
+      }
+    }
+    return merged;
+  }
+}
 
 final listingDetailProvider = FutureProvider.autoDispose
     .family<ListingDetail, String>((ref, listingId) async {

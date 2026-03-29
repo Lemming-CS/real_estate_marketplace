@@ -21,16 +21,21 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   late final TextEditingController _searchController;
+  late final ScrollController _scrollController;
 
   @override
   void initState() {
     super.initState();
     final filters = ref.read(homeListingFiltersProvider);
     _searchController = TextEditingController(text: filters.query);
+    _scrollController = ScrollController()..addListener(_onScroll);
   }
 
   @override
   void dispose() {
+    _scrollController
+      ..removeListener(_onScroll)
+      ..dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -198,8 +203,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
           Expanded(
             child: listingsAsync.when(
-              data: (page) {
-                if (page.items.isEmpty) {
+              data: (feed) {
+                if (feed.items.isEmpty) {
                   return Center(
                     child: Padding(
                       padding: const EdgeInsets.all(24),
@@ -211,11 +216,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 }
                 return RefreshIndicator(
                   onRefresh: () async {
-                    ref.invalidate(homeListingsProvider);
+                    await ref.read(homeListingsProvider.notifier).refreshFeed();
                   },
                   child: ListView.builder(
+                    controller: _scrollController,
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 28),
-                    itemCount: page.items.length + 1,
+                    itemCount: feed.items.length + 2,
                     itemBuilder: (context, index) {
                       if (index == 0) {
                         return Padding(
@@ -236,8 +242,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 ),
                                 child: Text(
                                   context.tr(
-                                    '${page.meta.totalItems} properties',
-                                    '${page.meta.totalItems} объектов',
+                                    '${feed.meta.totalItems} properties',
+                                    '${feed.meta.totalItems} объектов',
                                   ),
                                   style: theme.textTheme.labelLarge?.copyWith(
                                     fontWeight: FontWeight.w700,
@@ -256,7 +262,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           ),
                         );
                       }
-                      final listing = page.items[index - 1];
+                      if (index == feed.items.length + 1) {
+                        return _HomeFeedFooter(feed: feed);
+                      }
+                      final listing = feed.items[index - 1];
                       return ListingCard(
                         listing: listing,
                         onTap: () =>
@@ -469,6 +478,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
+  void _onScroll() {
+    if (!_scrollController.hasClients) {
+      return;
+    }
+    final position = _scrollController.position;
+    if (position.pixels >= position.maxScrollExtent - 600) {
+      ref.read(homeListingsProvider.notifier).loadNextPage();
+    }
+  }
+
   bool _hasActiveFilters(ListingFilters filters) {
     return filters.query.isNotEmpty ||
         filters.purpose != null ||
@@ -628,5 +647,59 @@ class _FilterSummaryChip extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _HomeFeedFooter extends StatelessWidget {
+  const _HomeFeedFooter({
+    required this.feed,
+  });
+
+  final HomeListingsState feed;
+
+  @override
+  Widget build(BuildContext context) {
+    if (feed.isLoadingMore) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 20),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (feed.loadMoreError != null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Center(
+          child: Text(
+            context.tr(
+              'Could not load more listings right now.',
+              'Не удалось загрузить больше объявлений.',
+            ),
+            style: Theme.of(context).textTheme.bodySmall,
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
+
+    if (!feed.hasMore) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 18),
+        child: Center(
+          child: Text(
+            context.tr(
+              'You have reached the end of the feed.',
+              'Вы дошли до конца списка.',
+            ),
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
+
+    return const SizedBox(height: 18);
   }
 }
