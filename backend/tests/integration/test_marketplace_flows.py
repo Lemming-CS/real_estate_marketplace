@@ -36,6 +36,7 @@ from app.db.models import (
     Report,
     Role,
     User,
+    UserStatusHistory,
     UserRole,
 )
 
@@ -79,7 +80,7 @@ def _create_category_with_attributes(session) -> Category:
     category = Category(slug="apartments", internal_name="Apartments", is_active=True, sort_order=10)
     category.translations = [
         CategoryTranslation(locale="en", name="Apartments", description="Apartment listings"),
-        CategoryTranslation(locale="ru", name="Kvartiry", description="Ob" "yavleniya o kvartirakh"),
+        CategoryTranslation(locale="ru", name="Квартиры", description="Объявления о квартирах"),
     ]
     bathrooms_attribute = CategoryAttribute(
         code="bathrooms",
@@ -120,7 +121,11 @@ def _create_category_without_attributes(session, *, slug: str, name: str) -> Cat
     category = Category(slug=slug, internal_name=name, is_active=True, sort_order=20)
     category.translations = [
         CategoryTranslation(locale="en", name=name, description=f"{name} category"),
-        CategoryTranslation(locale="ru", name=f"{name} ru", description=f"{name} ru category"),
+        CategoryTranslation(
+            locale="ru",
+            name="Дома" if slug == "houses" else f"{name} RU",
+            description="Категория недвижимости",
+        ),
     ]
     session.add(category)
     session.commit()
@@ -247,18 +252,18 @@ def test_admin_category_crud_and_public_localization(test_environment):
     user_headers = _auth_headers(_access_token_for_user(user, roles=[RoleCode.USER]))
 
     payload = {
-        "slug": "tablets",
-        "internal_name": "Tablets",
+        "slug": "commercial-space",
+        "internal_name": "Commercial Space",
         "translations": [
-            {"locale": "en", "name": "Tablets", "description": "Tablet computers"},
-            {"locale": "ru", "name": "Planshety", "description": "Planshetnye komp'yutery"},
+            {"locale": "en", "name": "Commercial Space", "description": "Commercial real-estate listings"},
+            {"locale": "ru", "name": "Коммерческие помещения", "description": "Коммерческая недвижимость"},
         ],
         "attributes": [
             {
-                "code": "storage_gb",
-                "display_name": "Storage",
+                "code": "parking_spaces",
+                "display_name": "Parking spaces",
                 "data_type": "number",
-                "unit": "GB",
+                "unit": "spots",
                 "is_required": True,
                 "is_filterable": True,
                 "sort_order": 1,
@@ -276,23 +281,23 @@ def test_admin_category_crud_and_public_localization(test_environment):
     update_response = client.patch(
         f"/api/v1/admin/categories/{category_public_id}",
         headers=admin_headers,
-        json={"slug": "tablet-devices"},
+        json={"slug": "commercial-properties"},
     )
     assert update_response.status_code == 200
-    assert update_response.json()["slug"] == "tablet-devices"
+    assert update_response.json()["slug"] == "commercial-properties"
 
     public_response = client.get("/api/v1/categories", params={"locale": "ru"})
     assert public_response.status_code == 200
     categories = public_response.json()
-    tablets = next(category for category in categories if category["slug"] == "tablet-devices")
-    assert tablets["name"] == "Planshety"
-    assert tablets["attributes"][0]["code"] == "storage_gb"
+    commercial = next(category for category in categories if category["slug"] == "commercial-properties")
+    assert commercial["name"] == "Коммерческие помещения"
+    assert commercial["attributes"][0]["code"] == "parking_spaces"
 
     delete_response = client.delete(f"/api/v1/admin/categories/{category_public_id}", headers=admin_headers)
     assert delete_response.status_code == 200
 
     public_after_delete = client.get("/api/v1/categories", params={"locale": "en"})
-    assert all(category["slug"] != "tablet-devices" for category in public_after_delete.json())
+    assert all(category["slug"] != "commercial-properties" for category in public_after_delete.json())
 
 
 def test_listing_crud_moderation_and_public_visibility(test_environment):
@@ -382,7 +387,7 @@ def test_listing_crud_moderation_and_public_visibility(test_environment):
     public_after_reactivate = client.get("/api/v1/listings", params={"locale": "ru"})
     assert public_after_reactivate.status_code == 200
     assert public_after_reactivate.json()["items"][0]["public_id"] == listing_public_id
-    assert public_after_reactivate.json()["items"][0]["category"]["name"] == "Kvartiry"
+    assert public_after_reactivate.json()["items"][0]["category"]["name"] == "Квартиры"
 
     replace_response = client.put(
         f"/api/v1/listings/{listing_public_id}/media/{media_public_id}",
@@ -1103,12 +1108,12 @@ def test_duplicate_conversation_creation_is_idempotent(test_environment):
     duplicate_response = client.post(
         f"/api/v1/conversations/from-listing/{listing_public_id}",
         headers=buyer_headers,
-        data={"initial_message": "Following up before I place an order."},
+        data={"initial_message": "Подтверждаю интерес к объекту и жду ответ владельца."},
     )
     assert duplicate_response.status_code == 201
     assert duplicate_response.json()["public_id"] == conversation_public_id
     assert len(duplicate_response.json()["messages"]) == 2
-    assert duplicate_response.json()["messages"][-1]["body"] == "Following up before I place an order."
+    assert duplicate_response.json()["messages"][-1]["body"] == "Подтверждаю интерес к объекту и жду ответ владельца."
 
     with session_factory() as session:
         conversation = session.query(Conversation).filter(Conversation.public_id == conversation_public_id).one()
@@ -1148,7 +1153,7 @@ def test_message_attachments_validation_and_secure_download(test_environment):
     create_response = client.post(
         f"/api/v1/conversations/from-listing/{listing.public_id}",
         headers=buyer_headers,
-        data={"initial_message": "Interested in the camera."},
+        data={"initial_message": "Здравствуйте, интересует эта квартира."},
     )
     assert create_response.status_code == 201
     conversation_public_id = create_response.json()["public_id"]
@@ -1220,7 +1225,7 @@ def test_reporting_queue_resolution_and_audit_logging(test_environment):
             "listing_public_id": listing.public_id,
             "reported_user_public_id": seller.public_id,
             "reason_code": "suspicious_listing",
-            "description": "The price looks suspiciously low for this model.",
+            "description": "Слишком низкая цена для этой квартиры, похоже на сомнительное объявление.",
         },
     )
     assert listing_report.status_code == 201
@@ -1233,7 +1238,7 @@ def test_reporting_queue_resolution_and_audit_logging(test_environment):
         json={
             "reported_user_public_id": seller.public_id,
             "reason_code": "abusive_behavior",
-            "description": "The seller used abusive language in chat.",
+            "description": "Продавец использовал оскорбительные выражения в переписке.",
         },
     )
     assert user_report.status_code == 201
@@ -1274,6 +1279,15 @@ def test_reporting_queue_resolution_and_audit_logging(test_environment):
         reports = session.query(Report).order_by(Report.created_at.asc()).all()
         assert reports[0].status.value == "resolved"
         assert reports[1].status.value == "rejected"
+        status_history = (
+            session.query(UserStatusHistory)
+            .filter(UserStatusHistory.user_id == seller.id)
+            .order_by(UserStatusHistory.created_at.desc(), UserStatusHistory.id.desc())
+            .first()
+        )
+        assert status_history is not None
+        assert status_history.new_status.value == "suspended"
+        assert "documents are checked" in (status_history.reason or "")
         audit_actions = {log.action for log in session.query(AdminAuditLog).all()}
         assert "report.resolve" in audit_actions
         assert "report.dismiss" in audit_actions
@@ -1401,6 +1415,20 @@ def test_payment_to_promotion_activation_flow_and_invalid_attempts(test_environm
     payment_public_id = initiate_payment.json()["payment"]["public_id"]
     promotion_public_id = initiate_payment.json()["promotion"]["public_id"]
 
+    pending_duplicate_attempt = client.post(
+        "/api/v1/payments/promotions/initiate",
+        headers=seller_headers,
+        json={
+            "listing_public_id": listing.public_id,
+            "package_public_id": package_public_id,
+            "duration_days": 14,
+            "target_city": "Bishkek",
+            "target_category_public_id": category.public_id,
+        },
+    )
+    assert pending_duplicate_attempt.status_code == 409
+    assert pending_duplicate_attempt.json()["error"]["code"] == "promotion_payment_pending"
+
     seller_payments = client.get("/api/v1/payments", headers=seller_headers)
     assert seller_payments.status_code == 200
     assert seller_payments.json()["meta"]["total_items"] == 1
@@ -1427,6 +1455,20 @@ def test_payment_to_promotion_activation_flow_and_invalid_attempts(test_environm
     assert listing_detail.json()["is_promoted"] is True
     assert listing_detail.json()["promotion_state"]["public_id"] == promotion_public_id
     assert listing_detail.json()["promotion_state"]["status"] == "active"
+
+    active_duplicate_attempt = client.post(
+        "/api/v1/payments/promotions/initiate",
+        headers=seller_headers,
+        json={
+            "listing_public_id": listing.public_id,
+            "package_public_id": package_public_id,
+            "duration_days": 14,
+            "target_city": "Bishkek",
+            "target_category_public_id": category.public_id,
+        },
+    )
+    assert active_duplicate_attempt.status_code == 409
+    assert active_duplicate_attempt.json()["error"]["code"] == "promotion_already_active"
 
     seller_notifications = client.get("/api/v1/notifications", headers=seller_headers)
     assert seller_notifications.status_code == 200

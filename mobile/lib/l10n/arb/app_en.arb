@@ -1,15 +1,14 @@
 {
   "@@locale": "en",
-  "homeTitle": "Starter Home",
-  "homeSubtitle": "This Flutter app is wired for routing, localization, and environment-based configuration. Marketplace features will land in later stages.",
-  "loginTitle": "Login Placeholder",
-  "loginSubtitle": "Authentication UI is intentionally deferred until backend auth endpoints are implemented.",
+  "homeTitle": "Real Estate Marketplace",
+  "homeSubtitle": "Browse apartments and houses for rent or sale, message owners, and manage your property listings.",
+  "loginTitle": "Sign in",
+  "loginSubtitle": "Access your buyer or seller account.",
   "backToHome": "Back to home",
   "apiBaseUrlLabel": "API base URL",
   "routingLabel": "Routing",
-  "routingValue": "go_router is configured for the starter screens.",
+  "routingValue": "go_router is configured for marketplace navigation.",
   "scopeLabel": "Current scope",
-  "scopeValue": "Scaffold only. Buyer and seller flows are still ahead.",
-  "openLoginPlaceholder": "Open login placeholder"
+  "scopeValue": "Buyer, seller, admin-backed moderation, messaging, and promotion flows are implemented.",
+  "openLoginPlaceholder": "Open sign-in"
 }
-

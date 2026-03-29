@@ -3,7 +3,7 @@
     <application
         
         android:usesCleartextTraffic="true"
-        android:label="electronics_marketplace_mobile"
+        android:label="Real Estate Marketplace"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

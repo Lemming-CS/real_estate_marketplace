@@ -1,11 +1,13 @@
 SHELL := /bin/bash
 
-.PHONY: help env-init compose-up compose-down compose-logs backend-install backend-migrate backend-seed backend-run backend-test admin-install admin-run admin-lint admin-build mobile-bootstrap mobile-get mobile-run mobile-analyze
+.PHONY: help env-init bootstrap-local compose-up compose-up-infra compose-down compose-logs backend-install backend-migrate backend-seed backend-run backend-test admin-install admin-run admin-lint admin-build mobile-bootstrap mobile-get mobile-run mobile-analyze
 
 help:
 	@echo "Available targets:"
 	@echo "  env-init          Copy sample env files into place if missing"
+	@echo "  bootstrap-local   Prepare env files, dependencies, and shared local services"
 	@echo "  compose-up        Start mysql, mailhog, backend, and admin via Docker Compose"
+	@echo "  compose-up-infra  Start only mysql and mailhog via Docker Compose"
 	@echo "  compose-down      Stop Docker Compose services"
 	@echo "  compose-logs      Tail Docker Compose logs"
 	@echo "  backend-install   Install backend dependencies into the active Python environment"
@@ -28,8 +30,14 @@ env-init:
 	@test -f admin/.env || cp admin/.env.example admin/.env
 	@test -f mobile/.env || cp mobile/.env.example mobile/.env
 
+bootstrap-local:
+	./scripts/bootstrap_local.sh
+
 compose-up:
 	docker compose up -d mysql mailhog backend admin
+
+compose-up-infra:
+	docker compose up -d mysql mailhog
 
 compose-down:
 	docker compose down

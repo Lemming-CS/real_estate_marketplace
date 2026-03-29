@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:electronics_marketplace_mobile/core/localization/app_strings.dart';
 import 'package:electronics_marketplace_mobile/features/auth/presentation/controllers/auth_controller.dart';
 import 'package:electronics_marketplace_mobile/features/listings/data/listings_repository.dart';
@@ -12,6 +14,8 @@ import 'package:electronics_marketplace_mobile/shared/widgets/network_media_imag
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:open_filex/open_filex.dart';
+import 'package:path_provider/path_provider.dart';
 
 class ListingDetailScreen extends ConsumerStatefulWidget {
   const ListingDetailScreen({
@@ -75,6 +79,7 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
                 onPageChanged: (index) => setState(() => _pageIndex = index),
                 onImageTap: (media) =>
                     _openImageViewer(listing.mediaItems, media),
+                onVideoTap: _openVideoMedia,
               ),
               const SizedBox(height: 16),
               Text(listing.title,
@@ -630,6 +635,56 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
       ),
     );
   }
+
+  Future<void> _openVideoMedia(ListingMedia media) async {
+    try {
+      final temporaryDirectory = await getTemporaryDirectory();
+      final file =
+          await ref.read(listingsRepositoryProvider).downloadPublicMedia(
+                assetKey: media.assetKey,
+                targetFile: File(
+                  '${temporaryDirectory.path}/property-video-${media.publicId}${_videoExtension(media.mimeType)}',
+                ),
+              );
+      final result = await OpenFilex.open(file.path);
+      if (!mounted) {
+        return;
+      }
+      if (result.type != ResultType.done) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              context.tr(
+                'Video downloaded but could not be opened on this device.',
+                'Видео загружено, но устройство не смогло его открыть.',
+              ),
+            ),
+          ),
+        );
+      }
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            context.tr(
+              'Unable to open the video tour right now.',
+              'Сейчас не удалось открыть видео-тур.',
+            ),
+          ),
+        ),
+      );
+    }
+  }
+
+  String _videoExtension(String mimeType) {
+    if (mimeType.toLowerCase() == 'video/mp4') {
+      return '.mp4';
+    }
+    return '';
+  }
 }
 
 class _ListingFavoriteAction extends ConsumerWidget {
@@ -690,12 +745,14 @@ class _MediaGallery extends StatelessWidget {
     required this.pageIndex,
     required this.onPageChanged,
     required this.onImageTap,
+    required this.onVideoTap,
   });
 
   final List<ListingMedia> items;
   final int pageIndex;
   final ValueChanged<int> onPageChanged;
   final ValueChanged<ListingMedia> onImageTap;
+  final ValueChanged<ListingMedia> onVideoTap;
 
   @override
   Widget build(BuildContext context) {
@@ -722,18 +779,26 @@ class _MediaGallery extends StatelessWidget {
               final item = items[index];
               if (item.isVideo) {
                 return Card(
-                  child: Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.play_circle_outline, size: 48),
-                          const SizedBox(height: 12),
-                          Text(context.tr(
-                              'Video tour available. Playback UI is planned next.',
-                              'Видео-тур доступен. Воспроизведение добавим следующим шагом.')),
-                        ],
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () => onVideoTap(item),
+                    child: Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.play_circle_outline, size: 48),
+                            const SizedBox(height: 12),
+                            Text(
+                              context.tr(
+                                'Tap to open the video tour.',
+                                'Нажмите, чтобы открыть видео-тур.',
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),

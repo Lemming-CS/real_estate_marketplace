@@ -3,9 +3,9 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "electronics-marketplace-backend"
+name = "real-estate-marketplace-backend"
 version = "0.1.0"
-description = "FastAPI backend for the electronics marketplace assignment."
+description = "FastAPI backend for the real-estate marketplace assignment."
 requires-python = ">=3.12"
 dependencies = [
   "bcrypt>=4.2,<5.0",

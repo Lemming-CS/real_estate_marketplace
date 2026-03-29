@@ -101,25 +101,25 @@ abstract class AppLocalizations {
   /// No description provided for @homeTitle.
   ///
   /// In en, this message translates to:
-  /// **'Starter Home'**
+  /// **'Real Estate Marketplace'**
   String get homeTitle;
 
   /// No description provided for @homeSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'This Flutter app is wired for routing, localization, and environment-based configuration. Marketplace features will land in later stages.'**
+  /// **'Browse apartments and houses for rent or sale, message owners, and manage your property listings.'**
   String get homeSubtitle;
 
   /// No description provided for @loginTitle.
   ///
   /// In en, this message translates to:
-  /// **'Login Placeholder'**
+  /// **'Sign in'**
   String get loginTitle;
 
   /// No description provided for @loginSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Authentication UI is intentionally deferred until backend auth endpoints are implemented.'**
+  /// **'Access your buyer or seller account.'**
   String get loginSubtitle;
 
   /// No description provided for @backToHome.
@@ -143,7 +143,7 @@ abstract class AppLocalizations {
   /// No description provided for @routingValue.
   ///
   /// In en, this message translates to:
-  /// **'go_router is configured for the starter screens.'**
+  /// **'go_router is configured for marketplace navigation.'**
   String get routingValue;
 
   /// No description provided for @scopeLabel.
@@ -155,13 +155,13 @@ abstract class AppLocalizations {
   /// No description provided for @scopeValue.
   ///
   /// In en, this message translates to:
-  /// **'Scaffold only. Buyer and seller flows are still ahead.'**
+  /// **'Buyer, seller, admin-backed moderation, messaging, and promotion flows are implemented.'**
   String get scopeValue;
 
   /// No description provided for @openLoginPlaceholder.
   ///
   /// In en, this message translates to:
-  /// **'Open login placeholder'**
+  /// **'Open sign-in'**
   String get openLoginPlaceholder;
 }
 

@@ -9,18 +9,17 @@ class AppLocalizationsRu extends AppLocalizations {
   AppLocalizationsRu([String locale = 'ru']) : super(locale);
 
   @override
-  String get homeTitle => 'Стартовый экран';
+  String get homeTitle => 'Маркетплейс недвижимости';
 
   @override
   String get homeSubtitle =>
-      'Это Flutter-приложение уже настроено для маршрутизации, локализации и конфигурации через переменные окружения. Функции маркетплейса будут добавлены позже.';
+      'Просматривайте квартиры и дома для аренды и покупки, пишите владельцам и управляйте своими объектами.';
 
   @override
-  String get loginTitle => 'Заглушка входа';
+  String get loginTitle => 'Вход';
 
   @override
-  String get loginSubtitle =>
-      'Интерфейс аутентификации отложен до появления backend-эндпоинтов входа.';
+  String get loginSubtitle => 'Войдите в аккаунт покупателя или продавца.';
 
   @override
   String get backToHome => 'Вернуться на главную';
@@ -32,15 +31,16 @@ class AppLocalizationsRu extends AppLocalizations {
   String get routingLabel => 'Маршрутизация';
 
   @override
-  String get routingValue => 'Для стартовых экранов уже настроен go_router.';
+  String get routingValue =>
+      'go_router уже настроен для навигации по маркетплейсу.';
 
   @override
   String get scopeLabel => 'Текущий объем';
 
   @override
   String get scopeValue =>
-      'Пока это только каркас. Сценарии покупателя и продавца будут реализованы позже.';
+      'Реализованы сценарии покупателя, продавца, модерации, переписки и продвижения.';
 
   @override
-  String get openLoginPlaceholder => 'Открыть заглушку входа';
+  String get openLoginPlaceholder => 'Открыть вход';
 }

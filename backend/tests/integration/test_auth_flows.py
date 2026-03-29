@@ -151,10 +151,10 @@ def test_current_user_profile_update_image_upload_and_owner_listings(test_enviro
     patch_response = client.patch(
         "/api/v1/profile/me",
         headers=_auth_headers(access_token),
-        json={"bio": "Electronics enthusiast", "locale": "ru"},
+        json={"bio": "Арендодатель с проверенными квартирами в центре", "locale": "ru"},
     )
     assert patch_response.status_code == 200
-    assert patch_response.json()["bio"] == "Electronics enthusiast"
+    assert patch_response.json()["bio"] == "Арендодатель с проверенными квартирами в центре"
     assert patch_response.json()["locale"] == "ru"
 
     image_response = client.post(

@@ -1,17 +1,18 @@
-# electronics_marketplace_mobile
+# Real Estate Marketplace Mobile
 
-A new Flutter project.
+Flutter client for the real-estate marketplace assignment.
 
-## Getting Started
+Key user flows already implemented:
+- registration, login, password reset
+- browse apartments and houses for rent or sale
+- property detail with map/location, counters, photos, and optional video indicator
+- create, edit, publish, sell, and delete own property listings
+- favorites, conversations, notifications, and promotion/payment history
 
-This project is a starting point for a Flutter application.
+Run locally:
+```bash
+flutter pub get
+./scripts/run_local.sh
+```
 
-A few resources to get you started if this is your first Flutter project:
-
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+The app reads `APP_NAME` and `API_BASE_URL` from `mobile/.env`.

@@ -9,18 +9,17 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
-  String get homeTitle => 'Starter Home';
+  String get homeTitle => 'Real Estate Marketplace';
 
   @override
   String get homeSubtitle =>
-      'This Flutter app is wired for routing, localization, and environment-based configuration. Marketplace features will land in later stages.';
+      'Browse apartments and houses for rent or sale, message owners, and manage your property listings.';
 
   @override
-  String get loginTitle => 'Login Placeholder';
+  String get loginTitle => 'Sign in';
 
   @override
-  String get loginSubtitle =>
-      'Authentication UI is intentionally deferred until backend auth endpoints are implemented.';
+  String get loginSubtitle => 'Access your buyer or seller account.';
 
   @override
   String get backToHome => 'Back to home';
@@ -32,15 +31,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get routingLabel => 'Routing';
 
   @override
-  String get routingValue => 'go_router is configured for the starter screens.';
+  String get routingValue =>
+      'go_router is configured for marketplace navigation.';
 
   @override
   String get scopeLabel => 'Current scope';
 
   @override
   String get scopeValue =>
-      'Scaffold only. Buyer and seller flows are still ahead.';
+      'Buyer, seller, admin-backed moderation, messaging, and promotion flows are implemented.';
 
   @override
-  String get openLoginPlaceholder => 'Open login placeholder';
+  String get openLoginPlaceholder => 'Open sign-in';
 }

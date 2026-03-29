@@ -65,6 +65,15 @@ class ListingsRepository {
     return ListingDetail.fromJson(json);
   }
 
+  Future<File> downloadPublicMedia({
+    required String assetKey,
+    required File targetFile,
+  }) async {
+    final bytes = await _client.getAbsoluteBytes("/api/v1${ApiEndpoints.media(assetKey)}");
+    await targetFile.writeAsBytes(bytes, flush: true);
+    return targetFile;
+  }
+
   Future<PublicUserProfile> getPublicUser(String userId) async {
     final json = await _client.getJson(ApiEndpoints.publicUser(userId));
     return PublicUserProfile.fromJson(json);

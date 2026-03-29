@@ -1,60 +1,131 @@
 # Moderation Flow
 
-## Scope
-This document covers report-driven moderation for the real-estate marketplace backend.
+## Summary
+This project uses report-driven moderation, not universal pre-publication approval.
+
+That is intentional and aligned with a more realistic real-estate marketplace:
+- active sellers can publish valid listings directly
+- admins focus on abuse, fraud, suspicious content, and user conduct
+- reports are the main moderation queue
 
 ## Listing Lifecycle
-1. Seller creates a property listing in `draft`.
-2. Seller fills the required real-estate fields, uploads media, and provides required category attributes.
-3. Active sellers can publish directly when validation passes.
-4. Published listings appear in public discovery immediately.
-5. Admin does not approve every listing by default. Admin intervenes through reports, visibility controls, and manual moderation actions.
-6. Listings can move between `published`, `inactive`, `archived`, `rejected`, and `sold` depending on owner or admin actions.
-7. `pending_review` remains available only for exceptional/manual moderation cases.
+1. Seller creates property in `draft`.
+2. Seller fills required real-estate fields.
+3. Seller can publish directly if:
+   - account is active
+   - listing passes validation
+4. Published listing appears in discovery immediately.
+5. Admin may later:
+   - hide it (`inactive`)
+   - archive it
+   - reject it
+   - move it to `pending_review` only in exceptional/manual cases
+6. Seller may also archive, reactivate, mark sold, or delete according to business rules.
 
-## Owner Rules
-- Only the owner or an admin can modify a listing.
-- Suspended, pending-verification, or deleted users cannot create or operate listings.
-- Draft, rejected, inactive, archived, and sold listings remain visible to the owner in private endpoints.
-- Public feeds and public detail views expose only `published` listings from active sellers.
+## Why Admin Does Not Manually Approve Every Listing
+- It would slow normal property supply unnecessarily.
+- Real marketplaces usually rely on post-publication moderation plus user reports.
+- The assignment is easier to defend when moderation effort is concentrated on suspicious cases.
+- The codebase already models reporting, audit logs, suspension history, and scoped admin review, so report-driven moderation is the stronger story.
 
-## Publication Rules
-- Publishing requires at least one active media item and at least one image.
-- Publishing requires valid real-estate fields such as `purpose`, `property_type`, `address_text`, coordinates, `room_count`, and `area_sqm`.
-- Required dynamic category attributes must be present before publication.
-- Editing a published property does not automatically push it back into admin review. The seller can continue operating the listing unless an admin intervenes.
+## Seller Validation Rules
+Publishing requires:
+- title
+- description
+- purpose (`rent` or `sale`)
+- property type (`apartment` or `house`)
+- city
+- address text
+- latitude / longitude
+- room count
+- area
+- valid category attribute values where required
 
-## Report-Driven Moderation
-- Reports are the main moderation intake for suspicious listings and abusive users.
-- Admin report review shows linked listing status, seller status, and current moderation context.
-- From the report workflow, admin can:
-  - dismiss the report
-  - mark the report in review
-  - resolve the report
-  - hide the listing by moving it to `inactive`
-  - archive the listing
-  - suspend the seller
-- Report-triggered actions also write audit logs and, for user suspension, create durable `user_status_history` entries.
+Property media is optional.
+- Photos are strongly encouraged for demo quality.
+- Optional MP4 video tours are supported.
+- If media exists, it must pass MIME and size validation.
 
-## Media Rules
-- Property listings support images and optional MP4 video tours.
-- Supported MIME types: `image/jpeg`, `image/png`, `image/webp`, `video/mp4`.
-- Max active media items per listing: `20`.
-- Max image size: `10 MB`.
-- Max video size: `50 MB`.
-- Published property listings must retain at least one image.
-- Primary media must be an image.
-- Storage keys are server-generated under `MEDIA_STORAGE_PATH/listings/<listing_public_id>/...`.
-- APIs expose media `public_id` and opaque `asset_key`, not arbitrary client-chosen filesystem paths.
+## Report Intake
+Users can report:
+- listings
+- users
+- conversations
 
-## Location and Privacy
-- The backend stores `address_text`, `city`, `district`, `map_label`, `latitude`, and `longitude`.
-- The current product decision is:
-  - public listing responses expose map-aware location fields
-  - exact `address_text` is only returned to owners and admins in listing detail responses
-- Future clients can choose approximate-pin rendering without another schema change.
+Report payload includes:
+- target ids
+- reason code
+- optional description
 
-## Admin Audit
-- Admin listing actions, report resolutions, user suspension/unsuspension, and category/package changes write to `admin_audit_logs`.
-- Logs capture actor, action, entity type, entity id, and before/after JSON snapshots.
-- Suspension and unsuspension notes are also persisted in `user_status_history` and surfaced in admin user detail.
+Reports are stored in `reports` and surfaced in:
+- admin reports queue
+- user detail context
+- listing moderation context
+- scoped conversation review context
+
+## Admin Actions From Reports
+From a report workflow, admin can:
+- mark the report in review
+- dismiss the report
+- resolve the report
+- hide the listing
+- archive the listing
+- suspend the seller/user
+
+These actions are intentionally operational and explicit, not vague “approve/reject marketplace item” shortcuts.
+
+## Listing Visibility Rules
+Public feeds and public detail show only:
+- `published` listings
+- from active sellers
+- not soft-deleted
+
+Owners can still see their own:
+- `draft`
+- `inactive`
+- `archived`
+- `rejected`
+- `sold`
+
+Deleted listings are soft-deleted and excluded from normal views.
+
+## Suspension Notes And Auditability
+Suspension notes are stored durably in:
+- `user_status_history.reason`
+
+Admin action logs are stored in:
+- `admin_audit_logs`
+
+Admin user detail shows:
+- latest status note
+- status history
+
+This makes moderation decisions explainable after the fact and satisfies the assignment’s need for auditable admin actions.
+
+## Conversation Review
+Admins should not casually browse all private chats.
+
+Implemented principle:
+- admin conversation review is scoped to abuse/review context
+- attachments remain protected
+- admin access is allowed only through explicit review flows
+
+This keeps messaging oversight investigation-aware instead of turning the admin panel into an unrestricted staff inbox.
+
+## Media And Safety Rules
+Listing media:
+- images: `jpeg`, `png`, `webp`
+- optional video: `mp4`
+
+Message attachments:
+- images
+- documents such as PDF
+
+All storage keys are server-generated.
+No attachment or media is public by default.
+
+## Payment And Promotion Moderation Notes
+- promotion packages can be activated/deactivated by admin
+- packages are soft-disabled, not deleted
+- historical payments and promotions remain linked
+- listing promotion activation still depends on successful payment, not admin override

@@ -7,6 +7,7 @@ import 'package:electronics_marketplace_mobile/features/listings/domain/category
 import 'package:electronics_marketplace_mobile/features/listings/domain/listing_form_data.dart';
 import 'package:electronics_marketplace_mobile/features/listings/domain/listing_models.dart';
 import 'package:electronics_marketplace_mobile/features/listings/presentation/controllers/listing_providers.dart';
+import 'package:electronics_marketplace_mobile/features/listings/presentation/listing_form_validators.dart';
 import 'package:electronics_marketplace_mobile/shared/widgets/map_preview.dart';
 import 'package:electronics_marketplace_mobile/shared/widgets/network_media_image.dart';
 import 'package:flutter/material.dart';
@@ -1366,175 +1367,50 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
   }
 
   String? _validateTitle(BuildContext context, String? value) {
-    final trimmed = value?.trim() ?? '';
-    if (trimmed.isEmpty) {
-      return context.tr('Title is required.', 'Заголовок обязателен.');
-    }
-    if (trimmed.length < 5) {
-      return context.tr(
-        'Title must be at least 5 characters.',
-        'Заголовок должен быть не короче 5 символов.',
-      );
-    }
-    return null;
+    return ListingFormValidators.validateTitle(value, context.tr);
   }
 
   String? _validateDescription(BuildContext context, String? value) {
-    final trimmed = value?.trim() ?? '';
-    if (trimmed.isEmpty) {
-      return context.tr('Description is required.', 'Описание обязательно.');
-    }
-    if (trimmed.length < 20) {
-      return context.tr(
-        'Description must be at least 20 characters.',
-        'Описание должно быть не короче 20 символов.',
-      );
-    }
-    return null;
+    return ListingFormValidators.validateDescription(value, context.tr);
   }
 
   String? _validateCity(BuildContext context, String? value) {
-    final trimmed = value?.trim() ?? '';
-    if (trimmed.isEmpty) {
-      return context.tr('City is required.', 'Город обязателен.');
-    }
-    if (trimmed.length < 2) {
-      return context.tr(
-        'City must be at least 2 characters.',
-        'Название города должно быть не короче 2 символов.',
-      );
-    }
-    return null;
+    return ListingFormValidators.validateCity(value, context.tr);
   }
 
   String? _validateAddress(BuildContext context, String? value) {
-    final trimmed = value?.trim() ?? '';
-    if (trimmed.isEmpty) {
-      return context.tr('Address is required.', 'Адрес обязателен.');
-    }
-    if (trimmed.length < 5) {
-      return context.tr(
-        'Address must be at least 5 characters.',
-        'Адрес должен быть не короче 5 символов.',
-      );
-    }
-    return null;
+    return ListingFormValidators.validateAddress(value, context.tr);
   }
 
   String? _validatePrice(BuildContext context, String? value) {
-    final trimmed = value?.trim() ?? '';
-    if (trimmed.isEmpty) {
-      return context.tr('Price is required.', 'Цена обязательна.');
-    }
-    final parsed = double.tryParse(trimmed);
-    if (parsed == null || parsed <= 0) {
-      return context.tr(
-        'Enter a valid price.',
-        'Укажите корректную цену.',
-      );
-    }
-    return null;
+    return ListingFormValidators.validatePrice(value, context.tr);
   }
 
   String? _validateLatitude(BuildContext context, String? value) {
-    final trimmed = value?.trim() ?? '';
-    if (trimmed.isEmpty) {
-      return context.tr('Latitude is required.', 'Нужна широта.');
-    }
-    final parsed = double.tryParse(trimmed);
-    if (parsed == null || parsed < -90 || parsed > 90) {
-      return context.tr(
-        'Latitude must be between -90 and 90.',
-        'Широта должна быть в диапазоне от -90 до 90.',
-      );
-    }
-    return null;
+    return ListingFormValidators.validateLatitude(value, context.tr);
   }
 
   String? _validateLongitude(BuildContext context, String? value) {
-    final trimmed = value?.trim() ?? '';
-    if (trimmed.isEmpty) {
-      return context.tr('Longitude is required.', 'Нужна долгота.');
-    }
-    final parsed = double.tryParse(trimmed);
-    if (parsed == null || parsed < -180 || parsed > 180) {
-      return context.tr(
-        'Longitude must be between -180 and 180.',
-        'Долгота должна быть в диапазоне от -180 до 180.',
-      );
-    }
-    return null;
+    return ListingFormValidators.validateLongitude(value, context.tr);
   }
 
   String? _validateRoomCount(BuildContext context, String? value) {
-    final trimmed = value?.trim() ?? '';
-    if (trimmed.isEmpty) {
-      return context.tr(
-        'Room count is required.',
-        'Количество комнат обязательно.',
-      );
-    }
-    final parsed = int.tryParse(trimmed);
-    if (parsed == null || parsed < 1) {
-      return context.tr(
-        'Enter a valid room count.',
-        'Укажите корректное количество комнат.',
-      );
-    }
-    return null;
+    return ListingFormValidators.validateRoomCount(value, context.tr);
   }
 
   String? _validateArea(BuildContext context, String? value) {
-    final trimmed = value?.trim() ?? '';
-    if (trimmed.isEmpty) {
-      return context.tr('Area is required.', 'Площадь обязательна.');
-    }
-    final parsed = double.tryParse(trimmed);
-    if (parsed == null || parsed <= 0) {
-      return context.tr(
-        'Enter a valid area.',
-        'Укажите корректную площадь.',
-      );
-    }
-    return null;
+    return ListingFormValidators.validateArea(value, context.tr);
   }
 
   String? _validateBathrooms(BuildContext context, String? value) {
-    final trimmed = value?.trim() ?? '';
-    if (trimmed.isEmpty) {
-      return context.tr(
-        'Bathroom count is required.',
-        'Количество санузлов обязательно.',
-      );
-    }
-    final parsed = double.tryParse(trimmed);
-    if (parsed == null || parsed <= 0) {
-      return context.tr(
-        'Enter a valid bathroom count.',
-        'Укажите корректное количество санузлов.',
-      );
-    }
-    return null;
+    return ListingFormValidators.validateBathrooms(value, context.tr);
   }
 
   String? _validateTotalFloors(BuildContext context, String? value) {
-    if (_propertyType != 'apartment') {
-      return null;
-    }
-    final trimmed = value?.trim() ?? '';
-    if (trimmed.isEmpty) {
-      return context.tr(
-        'Total floors are required for apartments.',
-        'Для квартир нужно указать общее количество этажей.',
-      );
-    }
-    final parsed = int.tryParse(trimmed);
-    if (parsed == null || parsed < 1) {
-      return context.tr(
-        'Enter a valid total floor count.',
-        'Укажите корректное общее количество этажей.',
-      );
-    }
-    return null;
+    return ListingFormValidators.validateTotalFloors(
+      value,
+      context.tr,
+      propertyType: _propertyType,
+    );
   }
 }

@@ -5,35 +5,53 @@
 Flutter Mobile App ----\
                         \
                          -> FastAPI Backend -> MySQL
-                        /
-React Admin Panel -----/                  -> Mailhog (local email sink)
+                        /                  -> Local media storage
+React Admin Panel -----/                   -> Mailhog
 ```
 
 ## Responsibilities
-- Mobile handles buyer and seller UX.
-- Admin handles moderation and operations UX.
-- Backend owns business rules, authorization, and persistence.
-- MySQL stores marketplace state.
-- Mailhog is a local-only helper for email-oriented flows.
+- Mobile handles renter/buyer and seller UX.
+- Admin handles operations, reports, visibility controls, payments/promotions oversight, and suspension review.
+- Backend owns auth, permissions, listing validation, moderation, messaging, promotions, and audit logging.
+- MySQL stores transactional state.
+- Media files are stored outside MySQL under the configured storage path.
 
 ## Request Flow
-1. Mobile or admin sends HTTP request to the backend.
-2. Backend validates auth, permissions, and request schema.
-3. Backend executes application logic and persists state in MySQL.
-4. Backend returns JSON responses to the requesting client.
-5. Future notification or email adapters are triggered from backend-side events, not client-side assumptions.
+1. Mobile or admin sends an HTTP request to the backend.
+2. Backend validates auth, status, permissions, and input schema.
+3. Backend executes domain logic and persists state.
+4. Backend returns JSON or protected media/file responses.
+5. Notification and payment-side effects are created by backend workflows, not by clients guessing state.
 
-## Listing Moderation Interaction
-1. Mobile creates or edits a listing in draft/private space.
-2. Mobile uploads listing media and submits the listing for review.
-3. Backend validates category attributes, media presence, ownership, and status transitions.
-4. Admin fetches the moderation queue from admin-prefixed endpoints.
-5. Admin approves or rejects the listing with a moderation note.
-6. Approved listings become visible in public listing endpoints; rejected listings stay private to the owner and admin.
+## Property Listing Interaction
+1. Seller creates or edits a property listing in `draft`.
+2. Seller fills real-estate fields:
+   - purpose
+   - property type
+   - city / district / address
+   - map coordinates
+   - rooms / area / floors / price
+3. Seller optionally uploads photos and video.
+4. Seller publishes directly once validation passes.
+5. Listing becomes visible in public discovery immediately.
+
+## Moderation Interaction
+1. Renter/buyer or another user reports a listing, user, or conversation.
+2. Admin sees the report in the report queue and linked context screens.
+3. Admin can hide/archive the listing or suspend the user if needed.
+4. Audit logs and status history capture the action and note.
+
+This is intentionally report-driven moderation rather than universal pre-approval.
+
+## Promotion Interaction
+1. Seller chooses a promotion package and targeting scope.
+2. Backend creates pending promotion and payment records.
+3. Mock payment result updates payment state.
+4. Only successful payment activates the promotion.
 
 ## Local Development Notes
-- Backend runs on `http://localhost:8000`
-- Admin runs on `http://localhost:5173`
-- MySQL runs on `localhost:3306`
-- Mailhog UI runs on `http://localhost:8025`
-- Flutter emulator/device should target the backend URL appropriate to its runtime environment
+- backend: `http://localhost:8000`
+- admin: `http://localhost:5173`
+- MySQL: `localhost:3306`
+- Mailhog UI: `http://localhost:8025`
+- Android emulator should use `10.0.2.2` for backend access

@@ -3,6 +3,9 @@ services:
     image: mysql:8.4
     container_name: marketplace-mysql
     restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${MYSQL_DATABASE}
@@ -24,13 +27,15 @@ services:
       dockerfile: Dockerfile
     container_name: marketplace-backend
     restart: unless-stopped
+    env_file:
+      - ./backend/.env
     environment:
-      APP_NAME: Electronics Marketplace API
+      APP_NAME: Real Estate Marketplace API
       APP_ENV: docker
       APP_HOST: 0.0.0.0
       APP_PORT: 8000
       APP_LOG_LEVEL: INFO
-      APP_CORS_ORIGINS: '["http://localhost:5173","http://127.0.0.1:5173"]'
+      APP_CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
       MYSQL_HOST: mysql
       MYSQL_PORT: 3306
       MYSQL_DATABASE: ${MYSQL_DATABASE}
@@ -38,10 +43,14 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       SMTP_HOST: mailhog
       SMTP_PORT: 1025
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      MEDIA_STORAGE_PATH: /app/uploads
+      MOCK_PAYMENT_CHECKOUT_BASE_URL: http://localhost:${BACKEND_PORT:-8000}/api/v1
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
       - ./backend:/app
+      - ./backend/uploads:/app/uploads
     depends_on:
       mysql:
         condition: service_healthy
@@ -55,8 +64,10 @@ services:
       dockerfile: Dockerfile
     container_name: marketplace-admin
     restart: unless-stopped
+    env_file:
+      - ./admin/.env
     environment:
-      VITE_APP_NAME: Electronics Marketplace Admin
+      VITE_APP_NAME: Real Estate Marketplace Admin
       VITE_API_BASE_URL: http://localhost:${BACKEND_PORT:-8000}/api/v1
     ports:
       - "${ADMIN_PORT:-5173}:5173"

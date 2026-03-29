@@ -1,349 +1,269 @@
 # Architecture
 
-## System Architecture
-The platform is intentionally designed as a multi-client system with one backend source of truth.
+## System Overview
+The project is a multi-client real-estate marketplace:
 
 ```text
-Flutter Mobile App  ----\
-                         \
-                          -> FastAPI Backend -> MySQL
-                         /                   -> Object Storage (MinIO locally, S3-compatible later)
-React Admin Panel  -----/                    -> Notification adapters
-                                             -> Payment provider adapter
+Flutter Mobile App ----\
+                        \
+                         -> FastAPI Backend -> MySQL
+                        /                  -> Local file storage
+React Admin Panel -----/                   -> Mailhog (local dev)
+                                           -> Mock payment adapter
 ```
 
-Key decisions:
+Core product scope:
+- apartments and houses
+- rent and sale listings
+- map-aware property locations
+- property photos and optional video tour
+- messaging between renter/buyer and seller
+- report-driven moderation
+- promotion packages and mock payment activation
 
-- business rules live in the backend, not duplicated in clients
-- mobile and admin remain thin clients over explicit API contracts
-- MySQL stores transactional state; media stays outside the database
-- admin functionality is separate from customer functionality
-- integrations with storage, notifications, and payments sit behind interfaces
+## Why This Architecture Fits The Assignment
+- One backend source of truth keeps auth, moderation, promotions, and listing state consistent.
+- Mobile and admin are intentionally separate apps, which demonstrates real multi-client integration.
+- Property workflows are explicit and interview-defensible:
+  - direct seller publication after validation
+  - reports as moderation intake
+  - admin visibility controls and suspension history
+  - promotions activated only after successful payment
 
-## Recommended Folder Structure
-### Repository root
+## Repository Structure
 ```text
 .
 ├── README.md
+├── Makefile
 ├── docker-compose.yml
-├── admin/
+├── scripts/
 ├── backend/
+├── mobile/
+├── admin/
 ├── docs/
 └── infra/
 ```
 
-### Backend
+## Backend Structure
 ```text
 backend/
 ├── alembic/
-│   ├── versions/
-│   └── env.py
 ├── app/
 │   ├── api/
 │   │   ├── deps.py
-│   │   └── router.py
+│   │   ├── router.py
+│   │   └── routes/
 │   ├── core/
-│   │   ├── config.py
-│   │   ├── security.py
-│   │   ├── logging.py
-│   │   └── exceptions.py
 │   ├── db/
 │   │   ├── base.py
 │   │   ├── session.py
 │   │   └── models/
-│   ├── shared/
-│   │   ├── schemas/
-│   │   ├── pagination/
-│   │   └── utils/
 │   ├── modules/
 │   │   ├── auth/
 │   │   ├── users/
-│   │   ├── catalog/
+│   │   ├── categories/
 │   │   ├── listings/
-│   │   ├── media/
-│   │   ├── orders/
-│   │   ├── payments/
-│   │   ├── promotions/
+│   │   ├── messaging/
 │   │   ├── notifications/
-│   │   ├── moderation/
-│   │   └── audit/
+│   │   ├── reports/
+│   │   ├── commerce/
+│   │   └── admin_console/
+│   ├── shared/
 │   └── main.py
-├── scripts/
 ├── tests/
-│   ├── integration/
-│   ├── unit/
-│   └── fixtures/
-├── pyproject.toml
-└── .env.example
+└── pyproject.toml
 ```
 
-Each backend module should follow the same internal shape:
+### Backend Separation Of Concerns
+- `api/`: HTTP routes, request parsing, dependency wiring
+- `modules/*/schemas.py`: Pydantic request/response contracts
+- `modules/*/service.py`: business rules and orchestration
+- `db/models/`: SQLAlchemy models and relational structure
+- `core/`: config, security, auth helpers, exceptions
+- `shared/`: pagination, storage helpers, shared response primitives
 
+This keeps business logic out of routers and keeps client-visible contracts explicit.
+
+## Mobile Structure
 ```text
-modules/listings/
-├── domain/
-├── application/
-├── infrastructure/
-└── presentation/
+mobile/lib/
+├── app/
+├── core/
+├── features/
+│   ├── auth/
+│   ├── home/
+│   ├── listings/
+│   ├── messaging/
+│   ├── notifications/
+│   ├── commerce/
+│   ├── reports/
+│   └── profile/
+├── l10n/
+└── shared/
 ```
 
-### Mobile
+### Mobile Layers
+- repository layer calls backend APIs
+- Riverpod providers manage async state and local session state
+- screens remain thin and mostly compose data + widgets
+- shared widgets cover images, cards, map previews, badges, and shell navigation
+
+This keeps Flutter state manageable without rewriting the app into a more complex architecture than the assignment needs.
+
+## Admin Structure
 ```text
-mobile/
-├── lib/
-│   ├── app/
-│   │   ├── router/
-│   │   ├── theme/
-│   │   └── bootstrap/
-│   ├── core/
-│   │   ├── api/
-│   │   ├── auth/
-│   │   ├── storage/
-│   │   └── widgets/
-│   ├── shared/
-│   │   ├── models/
-│   │   ├── utils/
-│   │   └── constants/
-│   ├── features/
-│   │   ├── auth/
-│   │   ├── home/
-│   │   ├── catalog/
-│   │   ├── listings/
-│   │   ├── favorites/
-│   │   ├── orders/
-│   │   ├── promotions/
-│   │   └── profile/
-│   └── l10n/
-├── test/
-├── integration_test/
-└── pubspec.yaml
+admin/src/
+├── app/
+├── core/
+│   ├── api/
+│   └── auth/
+├── features/
+│   ├── auth/
+│   ├── dashboard/
+│   ├── users/
+│   ├── listings/
+│   ├── reports/
+│   ├── payments/
+│   ├── promotions/
+│   ├── categories/
+│   ├── conversations/
+│   └── audit/
+└── shared/
 ```
 
-### Admin
-```text
-admin/
-├── src/
-│   ├── app/
-│   │   ├── router/
-│   │   ├── providers/
-│   │   └── layout/
-│   ├── core/
-│   │   ├── api/
-│   │   ├── auth/
-│   │   ├── permissions/
-│   │   └── utils/
-│   ├── shared/
-│   │   ├── components/
-│   │   ├── table/
-│   │   └── forms/
-│   ├── features/
-│   │   ├── dashboard/
-│   │   ├── auth/
-│   │   ├── users/
-│   │   ├── listings/
-│   │   ├── moderation/
-│   │   ├── orders/
-│   │   ├── promotions/
-│   │   └── audit/
-│   └── main.jsx
-├── public/
-├── tests/
-├── package.json
-└── .env.example
-```
-
-### Docs
-```text
-docs/
-├── ARCHITECTURE.md
-├── IMPLEMENTATION_PLAN.md
-├── API_CONTRACT_OVERVIEW.md
-├── DB_DESIGN.md
-└── decisions/
-```
-
-### Infra
-```text
-infra/
-├── compose/
-├── mysql/
-├── minio/
-├── nginx/
-└── scripts/
-```
-
-## Separation of Concerns
-- Backend owns validation, authorization, persistence, moderation rules, payment state, and audit logging.
-- Mobile owns presentation, local session storage, offline-friendly UI behavior, and user interaction flows.
-- Admin owns operational visibility and privileged workflows, but it does not bypass backend business rules.
-- Database stores normalized transactional state, not presentation logic.
-- Infrastructure code provisions supporting services, but does not contain domain rules.
-- Documentation stays versioned in the repository and acts as the operating contract for future prompts.
-
-## Backend Layers
-### Domain layer
-- entities, value objects, enums, and business invariants
-- no FastAPI, ORM, or external provider details
-- examples: `Listing`, `PromotionPlan`, `Order`, `ModerationDecision`
-
-### Application layer
-- use cases and orchestration
-- transaction boundaries and cross-module coordination
-- examples: `CreateListing`, `SubmitListingForReview`, `ActivatePromotion`, `PlaceOrder`
-
-### Infrastructure layer
-- SQLAlchemy repositories
-- storage adapters
-- payment provider adapters
-- notification adapters
-- password hashing and token persistence
-
-### Presentation layer
-- FastAPI routers
-- request/response schemas
-- auth dependencies
-- HTTP exception mapping
-
-The practical rule is simple: routers call use cases, use cases depend on interfaces, interfaces are implemented by infrastructure.
-
-## Mobile Layers
-### Presentation
-- screens, widgets, controllers, and route guards
-- state managed with Riverpod
-
-### Domain
-- entities, repository contracts, and use cases
-- no Dio or Flutter widget code
-
-### Data
-- DTOs, mappers, API clients, repository implementations, and local storage adapters
-
-### Core
-- shared auth/session handling
-- app-wide error handling
-- network client setup
-- localization bootstrap
-
-This keeps Flutter features testable and prevents API concerns from leaking directly into widgets.
-
-## Admin Architecture
-The admin panel should be treated as an internal operations product, not a thin page of ad hoc screens.
-
-- feature-first React structure
-- typed API client shared across admin features
-- route-level role and permission guards
-- reusable data table, filters, and action modal patterns
-- optimistic UI only where operationally safe
-- audit-sensitive actions require explicit confirmation and reason input where appropriate
-
-Recommended admin roles:
-
-- `admin_super`
-- `admin_moderator`
-- `admin_support`
-
-Permissions should be backend-enforced even if the UI also hides unauthorized actions.
+### Admin Design Principles
+- admin is an operational tool, not a second public-facing marketplace app
+- all privileged actions still go through backend role checks
+- conversation review is scoped to abuse/investigation context
+- suspension notes and audit logs are visible because operational traceability matters
 
 ## Authentication Strategy
-- Single identity domain with `users` plus role assignments.
-- Access tokens are short-lived JWTs.
-- Refresh tokens are opaque, stored hashed in the database, and rotated on use.
-- Mobile stores tokens in secure device storage.
-- Admin stores access tokens in memory and should use an HTTP-only refresh cookie where practical.
-- Seller access is not a separate login system; seller capability is a role/profile on the same identity.
-- Sensitive admin actions require backend role checks, not just client-side route guards.
+- JWT access token for API calls
+- opaque refresh token persisted in the database
+- hashed password storage on the backend
+- Flutter stores the session locally
+- admin keeps a separate auth flow and must use the admin panel, not the marketplace mobile app
 
-Baseline auth flows:
+Account status enforcement:
+- `active`
+- `pending_verification`
+- `suspended`
+- `deleted`
 
-1. Register or login.
-2. Receive access token and refresh token.
-3. Access token is used for API calls.
-4. Refresh token rotates through a dedicated endpoint.
-5. Logout revokes the refresh token session.
+Suspended users are blocked from restricted marketplace actions such as creating or operating listings.
+
+## Listing And Publication Strategy
+The project intentionally does not require universal pre-publication admin approval.
+
+Default path:
+1. seller creates listing in `draft`
+2. seller fills required property fields
+3. seller publishes directly if valid and active
+4. listing appears in public discovery immediately
+
+Admin path:
+- hide listing
+- archive listing
+- reject listing
+- manually send to review if needed
+
+This matches a more realistic marketplace workflow and keeps moderation focused on reports and abuse handling.
+
+## Real-Estate Data Modeling
+Core listing fields are first-class columns because they drive search and UI:
+- purpose
+- property type
+- city / district / address text / map label
+- latitude / longitude
+- rooms / area / floor / total floors / furnished
+- price amount / currency / normalized KGS price
+
+Flexible property metadata still uses dynamic category attributes for details that can vary by category over time.
+
+## Map Strategy
+- exact coordinates are stored in the listing row
+- mobile uses OpenStreetMap via `flutter_map`
+- admin can inspect coordinates in listing detail context
+- backend remains geocoder-agnostic
+
+Current product decision:
+- exact address text is owner/admin oriented
+- public clients use map-aware location fields and may choose full or approximate location display
 
 ## File Storage Strategy
-- Media files are stored in object storage, not as database blobs.
-- MySQL stores metadata such as storage key, checksum, MIME type, dimensions, and uploader.
-- Property media attach through the `listing_media` relation and can be images or short MP4 video tours.
-- Local development should use MinIO for S3-compatible behavior.
-- MVP upload path should be backend-managed multipart upload for simpler control and validation.
-- The storage service must be abstracted so S3-compatible production storage can replace local MinIO without changing domain code.
+- media is stored outside MySQL under `MEDIA_STORAGE_PATH`
+- listing media uses server-generated opaque storage keys
+- profile images, listing photos/videos, and message attachments all follow the same principle
+- seed photos are copied into the same storage tree as normal uploads
 
-## Location Strategy
-- Listings store `city`, `district`, `address_text`, `map_label`, `latitude`, and `longitude`.
-- The backend is map-provider agnostic; current clients are expected to use OpenStreetMap-backed components such as Leaflet on web/admin and `flutter_map` on mobile.
-- Exact address is stored for operational use, but the API can expose either exact or approximate location depending on the endpoint and product policy.
-- Current backend behavior keeps exact `address_text` private to owners/admin while still exposing map-aware fields for discovery and detail views.
+This keeps the storage model production-shaped without needing S3 immediately.
 
 ## Notification Strategy
-- In-app notifications are real and stored in MySQL from the first MVP.
-- Notification creation is event-driven from backend use cases such as listing approval, order confirmation, and promotion activation.
-- External delivery channels are adapters, not business logic.
-- Push delivery can be deferred, but the notification domain itself should not be skipped.
-- If push is added later, Firebase Cloud Messaging is the expected mobile path.
+Notifications are persisted as database records and shown in the clients.
+
+Implemented event types include:
+- new message
+- listing approved/rejected where relevant
+- payment successful
+- promotion activated
+- promotion expired
+
+Push delivery is intentionally deferred; the assignment only needs the domain and in-app visibility to be real.
 
 ## Payment Strategy
-- Payments are a first-class module with records, statuses, provider references, and event history.
-- The backend must never treat payment success as a boolean flag passed from the client.
-- The current MVP uses a mocked provider adapter for promotion purchases, but still persists real payment records and promotion state transitions.
-- `payment_records` remain separate from `promotions` so money movement and marketing activation can be reasoned about independently.
-- Provider adapters allow later addition of Stripe or another gateway without rewriting promotion logic.
+Payments are modeled separately from promotions.
 
-The important tradeoff is this: the domain must be real even if the first provider is a controlled sandbox.
+Flow:
+1. seller chooses promotion package and target
+2. backend creates `payment_records` and `promotions`
+3. payment starts in `pending`
+4. mock provider simulation marks payment `successful` or `failed`
+5. promotion activates only after successful payment
+
+This is easy to explain in interview terms because activation is not hidden behind a boolean flag.
 
 ## Promotion Activation Flow
-1. Seller selects an active promotion package, target scope (`city`, `category`, or both), and a duration that is a whole multiple of the package duration.
-2. Backend validates that the listing is owned by the seller, already `published`, and still eligible for promotion.
-3. Backend creates a `promotions` row in `pending_payment` with snapshot fields: `duration_days`, `price_amount`, `currency_code`, `target_city`, and `target_category_id`.
-4. Backend creates a linked `payment_records` row in `pending` with provider metadata and a mock checkout URL.
-5. Mock provider simulation marks the payment `successful`, `failed`, `cancelled`, or `refunded_ready`.
-6. Only a `successful` payment activates the promotion. Activation sets `starts_at`, `ends_at`, and `activated_at`.
-7. Discovery queries treat a listing as promoted only while the promotion is effectively active.
-8. Expired promotions transition to `expired` through backend logic and generate a user notification.
+1. listing must be valid and promotable
+2. seller selects package, city/category target, and duration
+3. backend calculates total price
+4. backend creates:
+   - pending payment record
+   - pending promotion record
+5. successful payment activates the promotion
+6. expired promotions are surfaced as expired state and notification
 
-Promotion packages themselves use a reversible lifecycle:
-- `active`: selectable in purchase flows and visible from the public package list
-- `inactive`: hidden from purchase flows but still preserved for historical payment and promotion records
-
-Deactivation is intentionally non-destructive. Admins can soft-disable a package and later reactivate it without breaking the existing payment or promotion history tied to that package.
-
-Important rule: promotion activation happens through application logic, never through direct field edits in admin tables.
+Inactive promotion packages are soft-disabled, not deleted, so historical promotions remain traceable.
 
 ## Moderation Flow
-1. Seller creates or edits a property listing in `draft`.
-2. Seller can publish directly once the property passes backend validation.
-3. Public discovery shows published listings from active sellers without mandatory pre-approval.
-4. Admin primarily works from reports, manual visibility controls, and suspension workflows rather than approving every new listing.
-5. Admin actions can move a listing to `inactive`, `archived`, `rejected`, `published`, or `pending_review` for exceptional manual review.
-6. Report flows can also suspend the seller and record both audit logs and user status history notes.
+Reports are the primary moderation intake.
 
-Moderation is intentionally report-driven because real-estate marketplaces need faster publication while still preserving a strong response path for fraud, misleading property details, and abusive behavior.
+Admin can act from:
+- report queue
+- user detail
+- listing detail
+- scoped conversation review
+
+Available actions:
+- dismiss report
+- resolve report
+- hide/archive listing
+- suspend/unsuspend seller
+
+All of these actions create audit logs. Suspension and unsuspension also create `user_status_history` records with notes.
 
 ## Audit Logging Strategy
-Audit logging is mandatory for admin and other sensitive workflows.
-
-What should be logged:
-
-- admin login and logout
-- listing moderation decisions
-- report queue decisions
-- user blocking or role changes
-- promotion package creation, activation, deactivation, and edits
-- promotion overrides
-- order status changes by admins
-- payment status overrides
-
-Each audit record should capture:
-
-- actor user id
-- actor role
-- action name
+Sensitive admin actions write to `admin_audit_logs` with:
+- actor
+- action
 - entity type
 - entity id
-- request id
-- before snapshot when relevant
-- after snapshot when relevant
-- IP and user agent where available
-- timestamp
+- before/after JSON
+- request metadata
 
-Audit logs are append-only at the application level and should never be editable through the admin UI.
+Suspension notes are also persisted in `user_status_history.reason`, which is surfaced in admin user detail.
+
+## Remaining Architectural Tradeoffs
+- Search is still relational/MySQL based rather than geospatial.
+- Video support exists, but the mobile playback experience is lighter than photo UX.
+- Admin conversation review is intentionally scoped and not a full omniscient inbox.
+- Storage is local-file based for local dev instead of S3/MinIO in production.
