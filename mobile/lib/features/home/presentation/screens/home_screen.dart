@@ -37,6 +37,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final listingsAsync = ref.watch(homeListingsProvider);
     final filters = ref.watch(homeListingFiltersProvider);
 
@@ -103,8 +104,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 10),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 TextField(
                   controller: _searchController,
@@ -123,7 +125,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 14),
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
@@ -175,6 +177,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ],
                   ),
                 ),
+                if (_hasActiveFilters(filters)) ...[
+                  const SizedBox(height: 14),
+                  Text(
+                    context.tr('Active filters', 'Активные фильтры'),
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: _buildActiveFilterChips(context, filters),
+                  ),
+                ],
               ],
             ),
           ),
@@ -196,10 +214,49 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ref.invalidate(homeListingsProvider);
                   },
                   child: ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                    itemCount: page.items.length,
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 28),
+                    itemCount: page.items.length + 1,
                     itemBuilder: (context, index) {
-                      final listing = page.items[index];
+                      if (index == 0) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.surface,
+                                  borderRadius: BorderRadius.circular(999),
+                                  border: Border.all(
+                                    color: theme.colorScheme.outlineVariant,
+                                  ),
+                                ),
+                                child: Text(
+                                  context.tr(
+                                    '${page.meta.totalItems} properties',
+                                    '${page.meta.totalItems} объектов',
+                                  ),
+                                  style: theme.textTheme.labelLarge?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                              const Spacer(),
+                              Text(
+                                _sortLabel(context, filters.sort),
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+                      final listing = page.items[index - 1];
                       return ListingCard(
                         listing: listing,
                         onTap: () =>
@@ -409,6 +466,167 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           },
         );
       },
+    );
+  }
+
+  bool _hasActiveFilters(ListingFilters filters) {
+    return filters.query.isNotEmpty ||
+        filters.purpose != null ||
+        filters.propertyType != null ||
+        filters.city.isNotEmpty ||
+        filters.minPrice.isNotEmpty ||
+        filters.maxPrice.isNotEmpty ||
+        filters.minAreaSqm.isNotEmpty ||
+        filters.maxAreaSqm.isNotEmpty ||
+        filters.roomCount != null;
+  }
+
+  List<Widget> _buildActiveFilterChips(
+    BuildContext context,
+    ListingFilters filters,
+  ) {
+    final notifier = ref.read(homeListingFiltersProvider.notifier);
+    final chips = <Widget>[];
+
+    if (filters.query.isNotEmpty) {
+      chips.add(
+        _FilterSummaryChip(
+          label: '"${filters.query}"',
+          onDeleted: () {
+            notifier.state = filters.copyWith(query: '');
+            _searchController.clear();
+          },
+        ),
+      );
+    }
+    if (filters.purpose != null) {
+      chips.add(
+        _FilterSummaryChip(
+          label: filters.purpose == 'rent'
+              ? context.tr('Rent', 'Аренда')
+              : context.tr('Sale', 'Продажа'),
+          onDeleted: () =>
+              notifier.state = filters.copyWith(clearPurpose: true),
+        ),
+      );
+    }
+    if (filters.propertyType != null) {
+      chips.add(
+        _FilterSummaryChip(
+          label: filters.propertyType == 'house'
+              ? context.tr('House', 'Дом')
+              : context.tr('Apartment', 'Квартира'),
+          onDeleted: () =>
+              notifier.state = filters.copyWith(clearPropertyType: true),
+        ),
+      );
+    }
+    if (filters.city.isNotEmpty) {
+      chips.add(
+        _FilterSummaryChip(
+          label: filters.city,
+          onDeleted: () => notifier.state = filters.copyWith(city: ''),
+        ),
+      );
+    }
+    if (filters.minPrice.isNotEmpty || filters.maxPrice.isNotEmpty) {
+      chips.add(
+        _FilterSummaryChip(
+          label: context.tr(
+            '${filters.minPrice.isEmpty ? '0' : filters.minPrice}-${filters.maxPrice.isEmpty ? '∞' : filters.maxPrice} С',
+            '${filters.minPrice.isEmpty ? '0' : filters.minPrice}-${filters.maxPrice.isEmpty ? '∞' : filters.maxPrice} С',
+          ),
+          onDeleted: () =>
+              notifier.state = filters.copyWith(minPrice: '', maxPrice: ''),
+        ),
+      );
+    }
+    if (filters.minAreaSqm.isNotEmpty || filters.maxAreaSqm.isNotEmpty) {
+      chips.add(
+        _FilterSummaryChip(
+          label:
+              '${filters.minAreaSqm.isEmpty ? '0' : filters.minAreaSqm}-${filters.maxAreaSqm.isEmpty ? '∞' : filters.maxAreaSqm} m²',
+          onDeleted: () =>
+              notifier.state = filters.copyWith(minAreaSqm: '', maxAreaSqm: ''),
+        ),
+      );
+    }
+    if (filters.roomCount != null) {
+      chips.add(
+        _FilterSummaryChip(
+          label: context.tr(
+            '${filters.roomCount} rooms',
+            '${filters.roomCount} комн.',
+          ),
+          onDeleted: () =>
+              notifier.state = filters.copyWith(clearRoomCount: true),
+        ),
+      );
+    }
+
+    return chips;
+  }
+
+  String _sortLabel(BuildContext context, String sort) {
+    switch (sort) {
+      case 'oldest':
+        return context.tr('Oldest first', 'Сначала старые');
+      case 'price_asc':
+        return context.tr('Price ascending', 'Цена по возрастанию');
+      case 'price_desc':
+        return context.tr('Price descending', 'Цена по убыванию');
+      case 'newest':
+      default:
+        return context.tr('Newest first', 'Сначала новые');
+    }
+  }
+}
+
+class _FilterSummaryChip extends StatelessWidget {
+  const _FilterSummaryChip({
+    required this.label,
+    required this.onDeleted,
+  });
+
+  final String label;
+  final VoidCallback onDeleted;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.only(left: 12, right: 6, top: 6, bottom: 6),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: theme.textTheme.labelLarge?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(width: 4),
+            InkWell(
+              onTap: onDeleted,
+              borderRadius: BorderRadius.circular(999),
+              child: Padding(
+                padding: const EdgeInsets.all(4),
+                child: Icon(
+                  Icons.close,
+                  size: 16,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

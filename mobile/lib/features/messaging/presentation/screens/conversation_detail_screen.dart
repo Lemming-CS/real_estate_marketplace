@@ -51,6 +51,7 @@ class _ConversationDetailScreenState
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final conversationAsync =
         ref.watch(conversationDetailProvider(widget.conversationId));
     final authState = ref.watch(authControllerProvider);
@@ -82,58 +83,165 @@ class _ConversationDetailScreenState
           return Column(
             children: [
               if (conversation.listing != null)
-                Material(
-                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  child: ListTile(
-                    leading: conversation.listing!.primaryMediaAssetKey == null
-                        ? const Icon(Icons.home_work_outlined)
-                        : ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: NetworkMediaImage(
-                              assetKey:
-                                  conversation.listing!.primaryMediaAssetKey!,
-                              width: 48,
-                              height: 48,
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                  child: Material(
+                    color: theme.colorScheme.surface,
+                    borderRadius: BorderRadius.circular(20),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(20),
+                      onTap: () => context
+                          .push('/listing/${conversation.listing!.publicId}'),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Row(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(14),
+                              child:
+                                  conversation.listing!.primaryMediaAssetKey ==
+                                          null
+                                      ? Container(
+                                          width: 56,
+                                          height: 56,
+                                          color: theme.colorScheme
+                                              .surfaceContainerHighest,
+                                          alignment: Alignment.center,
+                                          child: const Icon(
+                                            Icons.home_work_outlined,
+                                          ),
+                                        )
+                                      : NetworkMediaImage(
+                                          assetKey: conversation
+                                              .listing!.primaryMediaAssetKey!,
+                                          width: 56,
+                                          height: 56,
+                                        ),
                             ),
-                          ),
-                    title: Text(conversation.listing!.title),
-                    subtitle: Text(conversation.listing!.status),
-                    onTap: () => context
-                        .push('/listing/${conversation.listing!.publicId}'),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    conversation.listing!.title,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style:
+                                        theme.textTheme.titleMedium?.copyWith(
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: theme
+                                          .colorScheme.surfaceContainerHighest,
+                                      borderRadius: BorderRadius.circular(999),
+                                    ),
+                                    child: Text(
+                                      conversation.listing!.status,
+                                      style:
+                                          theme.textTheme.labelMedium?.copyWith(
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Icon(
+                              Icons.chevron_right,
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               Expanded(
-                child: conversation.messages.isEmpty
-                    ? Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: Text(
-                            context.tr(
-                              'No messages yet. Start the conversation below.',
-                              'Пока нет сообщений. Начните диалог ниже.',
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceContainerHighest.withValues(
+                      alpha: 0.28,
+                    ),
+                  ),
+                  child: conversation.messages.isEmpty
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Container(
+                              constraints: const BoxConstraints(maxWidth: 320),
+                              padding: const EdgeInsets.all(24),
+                              decoration: BoxDecoration(
+                                color: theme.colorScheme.surface,
+                                borderRadius: BorderRadius.circular(24),
+                              ),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.forum_outlined,
+                                    size: 42,
+                                    color: theme.colorScheme.primary,
+                                  ),
+                                  const SizedBox(height: 14),
+                                  Text(
+                                    context.tr(
+                                      'No messages yet',
+                                      'Пока нет сообщений',
+                                    ),
+                                    style:
+                                        theme.textTheme.titleMedium?.copyWith(
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    context.tr(
+                                      'Start the conversation below.',
+                                      'Начните диалог ниже.',
+                                    ),
+                                    textAlign: TextAlign.center,
+                                    style: theme.textTheme.bodyMedium?.copyWith(
+                                      color: theme.colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                            textAlign: TextAlign.center,
                           ),
+                        )
+                      : ListView.builder(
+                          reverse: true,
+                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+                          itemCount: conversation.messages.length,
+                          itemBuilder: (context, index) {
+                            final message = conversation.messages[
+                                conversation.messages.length - 1 - index];
+                            return _MessageBubble(
+                              message: message,
+                              isMine: message.senderUserId == currentUserId,
+                              accessToken: authState.session?.accessToken,
+                              senderLabel: message.senderUserId == currentUserId
+                                  ? context.tr('You', 'Вы')
+                                  : conversation.counterparty.fullName,
+                              onImageTap: (attachment) =>
+                                  _openImageViewer(authState, attachment),
+                              onDocumentTap: (attachment) =>
+                                  _openDocumentAttachment(
+                                authState,
+                                attachment,
+                              ),
+                            );
+                          },
                         ),
-                      )
-                    : ListView.builder(
-                        reverse: true,
-                        padding: const EdgeInsets.all(16),
-                        itemCount: conversation.messages.length,
-                        itemBuilder: (context, index) {
-                          final message = conversation.messages[
-                              conversation.messages.length - 1 - index];
-                          return _MessageBubble(
-                            message: message,
-                            isMine: message.senderUserId == currentUserId,
-                            accessToken: authState.session?.accessToken,
-                            onImageTap: (attachment) =>
-                                _openImageViewer(authState, attachment),
-                            onDocumentTap: (attachment) =>
-                                _openDocumentAttachment(authState, attachment),
-                          );
-                        },
-                      ),
+                ),
               ),
               _ConversationComposer(
                 controller: _messageController,
@@ -410,19 +518,20 @@ class _ConversationComposer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Material(
-      elevation: 8,
-      color: Theme.of(context).colorScheme.surface,
+      elevation: 14,
+      color: theme.colorScheme.surface,
       child: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               if (pendingAttachments.isNotEmpty)
                 SizedBox(
-                  height: 44,
+                  height: 46,
                   child: ListView.separated(
                     scrollDirection: Axis.horizontal,
                     itemCount: pendingAttachments.length,
@@ -430,72 +539,133 @@ class _ConversationComposer extends StatelessWidget {
                     itemBuilder: (context, index) {
                       final file = pendingAttachments[index];
                       final isImage = _looksLikeImage(file.path);
-                      return InputChip(
-                        avatar: Icon(
-                          isImage
-                              ? Icons.image_outlined
-                              : Icons.attach_file_outlined,
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
                         ),
-                        label: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 160),
-                          child: Text(
-                            file.path.split(Platform.pathSeparator).last,
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(999),
                         ),
-                        onDeleted:
-                            isSending ? null : () => onRemoveAttachment(file),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              isImage
+                                  ? Icons.image_outlined
+                                  : Icons.attach_file_outlined,
+                              size: 18,
+                              color: theme.colorScheme.primary,
+                            ),
+                            const SizedBox(width: 8),
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 150),
+                              child: Text(
+                                file.path.split(Platform.pathSeparator).last,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.labelLarge?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            InkWell(
+                              onTap: isSending
+                                  ? null
+                                  : () => onRemoveAttachment(file),
+                              borderRadius: BorderRadius.circular(999),
+                              child: const Padding(
+                                padding: EdgeInsets.all(2),
+                                child: Icon(Icons.close, size: 16),
+                              ),
+                            ),
+                          ],
+                        ),
                       );
                     },
                   ),
                 ),
-              if (pendingAttachments.isNotEmpty) const SizedBox(height: 8),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  IconButton(
-                    onPressed: isSending ? null : onPickImage,
-                    tooltip: context.tr('Attach image', 'Прикрепить фото'),
-                    icon: const Icon(Icons.photo_library_outlined),
-                  ),
-                  IconButton(
-                    onPressed: isSending ? null : onPickDocument,
-                    tooltip:
-                        context.tr('Attach document', 'Прикрепить документ'),
-                    icon: const Icon(Icons.attach_file_outlined),
-                  ),
-                  Expanded(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxHeight: 120),
-                      child: TextField(
-                        controller: controller,
-                        focusNode: focusNode,
-                        enabled: !isSending,
-                        minLines: 1,
-                        maxLines: 4,
-                        textInputAction: TextInputAction.newline,
-                        decoration: InputDecoration(
-                          hintText: context.tr(
-                            'Write a message',
-                            'Напишите сообщение',
+              if (pendingAttachments.isNotEmpty) const SizedBox(height: 10),
+              Container(
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest
+                      .withValues(alpha: 0.34),
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(color: theme.colorScheme.outlineVariant),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Container(
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surface,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              onPressed: isSending ? null : onPickImage,
+                              tooltip:
+                                  context.tr('Attach image', 'Прикрепить фото'),
+                              icon: const Icon(Icons.photo_library_outlined),
+                            ),
+                            IconButton(
+                              onPressed: isSending ? null : onPickDocument,
+                              tooltip: context.tr(
+                                'Attach document',
+                                'Прикрепить документ',
+                              ),
+                              icon: const Icon(Icons.attach_file_outlined),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxHeight: 120),
+                          child: TextField(
+                            controller: controller,
+                            focusNode: focusNode,
+                            enabled: !isSending,
+                            minLines: 1,
+                            maxLines: 4,
+                            textInputAction: TextInputAction.newline,
+                            decoration: InputDecoration(
+                              hintText: context.tr(
+                                'Write a message',
+                                'Напишите сообщение',
+                              ),
+                              filled: true,
+                              fillColor: theme.colorScheme.surface,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 14,
+                              ),
+                            ),
                           ),
                         ),
                       ),
-                    ),
+                      const SizedBox(width: 10),
+                      IconButton.filled(
+                        onPressed: isSending ? null : onSend,
+                        tooltip: context.tr('Send', 'Отправить'),
+                        icon: isSending
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.send_rounded),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  IconButton.filled(
-                    onPressed: isSending ? null : onSend,
-                    tooltip: context.tr('Send', 'Отправить'),
-                    icon: isSending
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.send),
-                  ),
-                ],
+                ),
               ),
             ],
           ),
@@ -559,57 +729,84 @@ class _ConversationReportSheetState extends State<_ConversationReportSheet> {
       child: SafeArea(
         top: false,
         child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                context.tr('Report conversation', 'Пожаловаться на диалог'),
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: _selectedReason,
-                items: const [
-                  DropdownMenuItem(value: 'abuse', child: Text('Abuse')),
-                  DropdownMenuItem(
-                      value: 'harassment', child: Text('Harassment')),
-                  DropdownMenuItem(value: 'spam', child: Text('Spam')),
-                  DropdownMenuItem(value: 'scam', child: Text('Scam')),
-                ],
-                onChanged: (value) => setState(
-                  () => _selectedReason = value ?? 'abuse',
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _descriptionController,
-                minLines: 3,
-                maxLines: 5,
-                decoration: InputDecoration(
-                  hintText: context.tr(
-                    'Explain what happened in this conversation',
-                    'Опишите, что произошло в этом диалоге',
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 42,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.outlineVariant,
+                    borderRadius: BorderRadius.circular(999),
                   ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: () {
-                    Navigator.of(context).pop(
-                      _ConversationReportDraft(
-                        reasonCode: _selectedReason,
-                        description: _descriptionController.text,
+                const SizedBox(height: 16),
+                Text(
+                  context.tr('Report conversation', 'Пожаловаться на диалог'),
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
                       ),
-                    );
-                  },
-                  child: Text(
-                    context.tr('Submit report', 'Отправить жалобу'),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  context.tr(
+                    'Send a moderation report if this conversation contains abuse, fraud, or spam.',
+                    'Отправьте жалобу, если в диалоге есть оскорбления, мошенничество или спам.',
+                  ),
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  initialValue: _selectedReason,
+                  items: const [
+                    DropdownMenuItem(value: 'abuse', child: Text('Abuse')),
+                    DropdownMenuItem(
+                        value: 'harassment', child: Text('Harassment')),
+                    DropdownMenuItem(value: 'spam', child: Text('Spam')),
+                    DropdownMenuItem(value: 'scam', child: Text('Scam')),
+                  ],
+                  onChanged: (value) => setState(
+                    () => _selectedReason = value ?? 'abuse',
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _descriptionController,
+                  minLines: 3,
+                  maxLines: 5,
+                  decoration: InputDecoration(
+                    hintText: context.tr(
+                      'Explain what happened in this conversation',
+                      'Опишите, что произошло в этом диалоге',
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: () {
+                      Navigator.of(context).pop(
+                        _ConversationReportDraft(
+                          reasonCode: _selectedReason,
+                          description: _descriptionController.text,
+                        ),
+                      );
+                    },
+                    child: Text(
+                      context.tr('Submit report', 'Отправить жалобу'),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -622,6 +819,7 @@ class _MessageBubble extends StatelessWidget {
     required this.message,
     required this.isMine,
     required this.accessToken,
+    required this.senderLabel,
     required this.onImageTap,
     required this.onDocumentTap,
   });
@@ -629,97 +827,147 @@ class _MessageBubble extends StatelessWidget {
   final ConversationMessage message;
   final bool isMine;
   final String? accessToken;
+  final String senderLabel;
   final ValueChanged<MessageAttachment> onImageTap;
   final ValueChanged<MessageAttachment> onDocumentTap;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final bubbleColor =
-        isMine ? colorScheme.primaryContainer : colorScheme.surfaceContainer;
+    final bubbleColor = isMine
+        ? colorScheme.primary.withValues(alpha: 0.12)
+        : colorScheme.surface;
 
     return Align(
       alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 320),
-        child: Card(
-          color: bubbleColor,
-          margin: const EdgeInsets.only(bottom: 12),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment:
-                  isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-              children: [
-                if ((message.body ?? '').isNotEmpty) Text(message.body!),
-                if (message.attachments.isNotEmpty) ...[
-                  if ((message.body ?? '').isNotEmpty)
-                    const SizedBox(height: 8),
-                  ...message.attachments.map(
-                    (attachment) => Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: attachment.isImage
-                          ? InkWell(
-                              onTap: () => onImageTap(attachment),
-                              borderRadius: BorderRadius.circular(12),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  NetworkMediaImage(
-                                    requestPath: attachment.downloadUrl,
-                                    accessToken: accessToken,
-                                    width: 220,
-                                    height: 160,
-                                    borderRadius: BorderRadius.circular(12),
+        constraints: const BoxConstraints(maxWidth: 330),
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 14),
+          child: Column(
+            crossAxisAlignment:
+                isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: Text(
+                  senderLabel,
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                ),
+              ),
+              const SizedBox(height: 6),
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: bubbleColor,
+                  borderRadius: BorderRadius.only(
+                    topLeft: const Radius.circular(20),
+                    topRight: const Radius.circular(20),
+                    bottomLeft: Radius.circular(isMine ? 20 : 8),
+                    bottomRight: Radius.circular(isMine ? 8 : 20),
+                  ),
+                  border: Border.all(
+                    color: Theme.of(context).colorScheme.outlineVariant,
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if ((message.body ?? '').isNotEmpty)
+                        Text(
+                          message.body!,
+                          style:
+                              Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    height: 1.35,
                                   ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    attachment.fileName,
-                                    style:
-                                        Theme.of(context).textTheme.bodySmall,
-                                  ),
-                                ],
-                              ),
-                            )
-                          : InkWell(
-                              onTap: () => onDocumentTap(attachment),
-                              borderRadius: BorderRadius.circular(12),
-                              child: Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .outlineVariant,
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(Icons.description_outlined),
-                                    const SizedBox(width: 8),
-                                    Flexible(
-                                      child: Text(
-                                        attachment.fileName,
-                                        overflow: TextOverflow.ellipsis,
+                        ),
+                      if (message.attachments.isNotEmpty) ...[
+                        if ((message.body ?? '').isNotEmpty)
+                          const SizedBox(height: 10),
+                        ...message.attachments.map(
+                          (attachment) => Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: attachment.isImage
+                                ? InkWell(
+                                    onTap: () => onImageTap(attachment),
+                                    borderRadius: BorderRadius.circular(14),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        NetworkMediaImage(
+                                          requestPath: attachment.downloadUrl,
+                                          accessToken: accessToken,
+                                          width: 224,
+                                          height: 164,
+                                          borderRadius:
+                                              BorderRadius.circular(14),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          attachment.fileName,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall
+                                              ?.copyWith(
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                        ),
+                                      ],
+                                    ),
+                                  )
+                                : InkWell(
+                                    onTap: () => onDocumentTap(attachment),
+                                    borderRadius: BorderRadius.circular(14),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(14),
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .surfaceContainerHighest
+                                            .withValues(alpha: 0.4),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(
+                                              Icons.description_outlined),
+                                          const SizedBox(width: 10),
+                                          Flexible(
+                                            child: Text(
+                                              attachment.fileName,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .bodyMedium
+                                                  ?.copyWith(
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                    ),
+                                  ),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 6),
+                      Text(
+                        DateFormat('MMM d, HH:mm')
+                            .format(message.createdAt.toLocal()),
+                        style: Theme.of(context).textTheme.labelSmall,
+                      ),
+                    ],
                   ),
-                ],
-                const SizedBox(height: 4),
-                Text(
-                  DateFormat('MMM d, HH:mm')
-                      .format(message.createdAt.toLocal()),
-                  style: Theme.of(context).textTheme.labelSmall,
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

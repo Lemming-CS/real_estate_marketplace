@@ -35,6 +35,10 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
   Widget build(BuildContext context) {
     final detailAsync = ref.watch(listingDetailProvider(widget.listingId));
     final authState = ref.watch(authControllerProvider);
+    final ownerListing = detailAsync.maybeWhen(
+      data: (listing) => _isOwner(authState, listing),
+      orElse: () => false,
+    );
 
     return Scaffold(
       appBar: AppBar(
@@ -45,7 +49,7 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
             icon: const Icon(Icons.home_outlined),
             tooltip: context.tr('Home', 'Главная'),
           ),
-          if (authState.isAuthenticated)
+          if (authState.isAuthenticated && !ownerListing)
             _ListingFavoriteAction(
               listingId: widget.listingId,
               accessToken: authState.session!.accessToken,
@@ -152,20 +156,38 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
+                  if (listing.status == 'sold')
+                    _InfoChip(
+                      label: context.tr('Sold', 'Продано'),
+                      icon: Icons.check_circle_outline,
+                    ),
                   _InfoChip(
                       label: listing.purpose == 'rent'
                           ? context.tr('For rent', 'Аренда')
-                          : context.tr('For sale', 'Продажа')),
+                          : context.tr('For sale', 'Продажа'),
+                      icon: listing.purpose == 'rent'
+                          ? Icons.key_outlined
+                          : Icons.sell_outlined),
                   _InfoChip(
                       label: listing.propertyType == 'apartment'
                           ? context.tr('Apartment', 'Квартира')
-                          : context.tr('House', 'Дом')),
+                          : context.tr('House', 'Дом'),
+                      icon: listing.propertyType == 'apartment'
+                          ? Icons.apartment_outlined
+                          : Icons.cottage_outlined),
                   _InfoChip(
                       label:
-                          '${listing.roomCount} ${context.tr('rooms', 'комн.')}'),
-                  _InfoChip(label: '${listing.areaSqm} m²'),
+                          '${listing.roomCount} ${context.tr('rooms', 'комн.')}',
+                      icon: Icons.bed_outlined),
+                  _InfoChip(
+                    label: '${listing.areaSqm} m²',
+                    icon: Icons.straighten_outlined,
+                  ),
                   if (listing.floor != null && listing.totalFloors != null)
-                    _InfoChip(label: '${listing.floor}/${listing.totalFloors}'),
+                    _InfoChip(
+                      label: '${listing.floor}/${listing.totalFloors}',
+                      icon: Icons.layers_outlined,
+                    ),
                 ],
               ),
               const SizedBox(height: 16),
@@ -278,6 +300,15 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
                         child: Text(context.tr('Publish', 'Опубликовать')),
                       ),
                     if (listing.status == 'published')
+                      FilledButton(
+                        onPressed: _ownerActionBusy
+                            ? null
+                            : () => _markListingSold(authState, listing),
+                        child: Text(
+                          context.tr('Mark as sold', 'Отметить как проданное'),
+                        ),
+                      ),
+                    if (listing.status == 'published')
                       FilledButton.tonal(
                         onPressed: () => context
                             .push('/promote-listing/${listing.publicId}'),
@@ -349,6 +380,11 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
         return context.tr(
           'This listing is still a draft. Publish it when you are ready.',
           'Это объявление пока в черновике. Опубликуйте его, когда будете готовы.',
+        );
+      case 'sold':
+        return context.tr(
+          'This listing is marked as sold and shown as closed in your account.',
+          'Это объявление отмечено как проданное и отображается в вашем аккаунте как закрытое.',
         );
       default:
         return null;
@@ -485,6 +521,74 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
         SnackBar(
           content: Text(
             context.tr('Listing deleted.', 'Объявление удалено.'),
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.toString())));
+    } finally {
+      if (mounted) {
+        setState(() => _ownerActionBusy = false);
+      }
+    }
+  }
+
+  Future<void> _markListingSold(
+      AuthState authState, ListingDetail listing) async {
+    final session = authState.session;
+    if (session == null) {
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(context.tr('Mark as sold?', 'Отметить как проданное?')),
+        content: Text(
+          context.tr(
+            'This property will remain in your listing history, but it will no longer be treated as active.',
+            'Объект останется в истории ваших объявлений, но больше не будет считаться активным.',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(context.tr('Cancel', 'Отмена')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(context.tr('Mark as sold', 'Отметить как проданное')),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    setState(() => _ownerActionBusy = true);
+    final repository = ref.read(listingsRepositoryProvider);
+    try {
+      await repository.markListingSold(
+        accessToken: session.accessToken,
+        listingId: listing.publicId,
+      );
+      if (!mounted) {
+        return;
+      }
+      ref.invalidate(listingDetailProvider(widget.listingId));
+      ref.invalidate(myListingsProvider);
+      ref.invalidate(homeListingsProvider);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            context.tr(
+              'Listing marked as sold.',
+              'Объявление отмечено как проданное.',
+            ),
           ),
         ),
       );
@@ -771,13 +875,20 @@ class _ListingImageViewerScreenState extends State<_ListingImageViewerScreen> {
 }
 
 class _InfoChip extends StatelessWidget {
-  const _InfoChip({required this.label});
+  const _InfoChip({
+    required this.label,
+    this.icon,
+  });
 
   final String label;
+  final IconData? icon;
 
   @override
   Widget build(BuildContext context) {
-    return Chip(label: Text(label));
+    return Chip(
+      avatar: icon == null ? null : Icon(icon, size: 18),
+      label: Text(label),
+    );
   }
 }
 

@@ -67,86 +67,83 @@ class MyListingsScreen extends ConsumerWidget {
             itemCount: page.items.length,
             itemBuilder: (context, index) {
               final listing = page.items[index];
-              return ListingCard(
-                listing: listing,
-                onTap: () => context.push('/listing/${listing.publicId}'),
-                trailing: PopupMenuButton<String>(
-                  onSelected: (action) async {
-                    final token = authState.session!.accessToken;
-                    final repository = ref.read(listingsRepositoryProvider);
-                    switch (action) {
-                      case 'edit':
-                        context.push('/edit-listing/${listing.publicId}');
-                        return;
-                      case 'promote':
-                        context.push('/promote-listing/${listing.publicId}');
-                        return;
-                      case 'publish':
-                        await repository.publishListing(
-                          accessToken: token,
-                          listingId: listing.publicId,
-                        );
-                        break;
-                      case 'archive':
-                        await repository.archiveListing(
-                          accessToken: token,
-                          listingId: listing.publicId,
-                        );
-                        break;
-                      case 'reactivate':
-                        await repository.reactivateListing(
-                          accessToken: token,
-                          listingId: listing.publicId,
-                        );
-                        break;
-                      case 'delete':
-                        final confirmed = await _confirmDelete(context);
-                        if (confirmed != true || !context.mounted) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (listing.status == 'sold')
+                    _OwnerStatusBanner(
+                      icon: Icons.check_circle_outline,
+                      title: context.tr('Sold', 'Продано'),
+                      message: context.tr(
+                        'This property is closed and no longer treated as active.',
+                        'Этот объект закрыт и больше не считается активным.',
+                      ),
+                    ),
+                  ListingCard(
+                    listing: listing,
+                    onTap: () => context.push('/listing/${listing.publicId}'),
+                    trailing: _ListingActionsMenu(
+                      status: listing.status,
+                      onSelected: (action) async {
+                        final token = authState.session!.accessToken;
+                        final repository = ref.read(listingsRepositoryProvider);
+                        switch (action) {
+                          case 'edit':
+                            context.push('/edit-listing/${listing.publicId}');
+                            return;
+                          case 'promote':
+                            context
+                                .push('/promote-listing/${listing.publicId}');
+                            return;
+                          case 'publish':
+                            await repository.publishListing(
+                              accessToken: token,
+                              listingId: listing.publicId,
+                            );
+                            break;
+                          case 'archive':
+                            await repository.archiveListing(
+                              accessToken: token,
+                              listingId: listing.publicId,
+                            );
+                            break;
+                          case 'reactivate':
+                            await repository.reactivateListing(
+                              accessToken: token,
+                              listingId: listing.publicId,
+                            );
+                            break;
+                          case 'mark_sold':
+                            final confirmed = await _confirmMarkSold(context);
+                            if (confirmed != true || !context.mounted) {
+                              return;
+                            }
+                            await repository.markListingSold(
+                              accessToken: token,
+                              listingId: listing.publicId,
+                            );
+                            break;
+                          case 'delete':
+                            final confirmed = await _confirmDelete(context);
+                            if (confirmed != true || !context.mounted) {
+                              return;
+                            }
+                            await repository.deleteListing(
+                              accessToken: token,
+                              listingId: listing.publicId,
+                            );
+                            break;
+                        }
+                        if (!context.mounted) {
                           return;
                         }
-                        await repository.deleteListing(
-                          accessToken: token,
-                          listingId: listing.publicId,
-                        );
-                        break;
-                    }
-                    if (!context.mounted) {
-                      return;
-                    }
-                    ref.invalidate(myListingsProvider);
-                    ref.invalidate(homeListingsProvider);
-                    ref.invalidate(listingDetailProvider(listing.publicId));
-                  },
-                  itemBuilder: (context) => [
-                    PopupMenuItem(
-                        value: 'edit',
-                        child: Text(context.tr('Edit', 'Редактировать'))),
-                    if (listing.status == 'published')
-                      PopupMenuItem(
-                        value: 'promote',
-                        child: Text(context.tr('Promote', 'Продвинуть')),
-                      ),
-                    if (listing.status == 'draft' ||
-                        listing.status == 'inactive')
-                      PopupMenuItem(
-                          value: 'publish',
-                          child: Text(context.tr('Publish', 'Опубликовать'))),
-                    if (listing.status == 'published')
-                      PopupMenuItem(
-                          value: 'archive',
-                          child: Text(context.tr('Archive', 'Архивировать'))),
-                    if (listing.status == 'archived' ||
-                        listing.status == 'inactive')
-                      PopupMenuItem(
-                          value: 'reactivate',
-                          child:
-                              Text(context.tr('Reactivate', 'Активировать'))),
-                    PopupMenuItem(
-                      value: 'delete',
-                      child: Text(context.tr('Delete', 'Удалить')),
+                        ref.invalidate(myListingsProvider);
+                        ref.invalidate(homeListingsProvider);
+                        ref.invalidate(listingDetailProvider(listing.publicId));
+                      },
                     ),
-                  ],
-                ),
+                  ),
+                ],
               );
             },
           );
@@ -176,6 +173,156 @@ class MyListingsScreen extends ConsumerWidget {
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
             child: Text(context.tr('Delete', 'Удалить')),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<bool?> _confirmMarkSold(BuildContext context) {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(context.tr('Mark as sold?', 'Отметить как проданное?')),
+        content: Text(
+          context.tr(
+            'This listing will stay in your account history, but it will no longer behave like an active property.',
+            'Объявление останется в истории вашего аккаунта, но больше не будет считаться активным объектом.',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(context.tr('Cancel', 'Отмена')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(context.tr('Mark as sold', 'Отметить как проданное')),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ListingActionsMenu extends StatelessWidget {
+  const _ListingActionsMenu({
+    required this.status,
+    required this.onSelected,
+  });
+
+  final String status;
+  final ValueChanged<String> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        if (status == 'sold')
+          Container(
+            margin: const EdgeInsets.only(bottom: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: Theme.of(context)
+                  .colorScheme
+                  .secondaryContainer
+                  .withValues(alpha: 0.9),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(
+              context.tr('Sold', 'Продано'),
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+            ),
+          ),
+        PopupMenuButton<String>(
+          onSelected: onSelected,
+          itemBuilder: (context) => [
+            PopupMenuItem(
+              value: 'edit',
+              child: Text(context.tr('Edit', 'Редактировать')),
+            ),
+            if (status == 'published')
+              PopupMenuItem(
+                value: 'promote',
+                child: Text(context.tr('Promote', 'Продвинуть')),
+              ),
+            if (status == 'draft' || status == 'inactive')
+              PopupMenuItem(
+                value: 'publish',
+                child: Text(context.tr('Publish', 'Опубликовать')),
+              ),
+            if (status == 'published')
+              PopupMenuItem(
+                value: 'mark_sold',
+                child:
+                    Text(context.tr('Mark as sold', 'Отметить как проданное')),
+              ),
+            if (status == 'published')
+              PopupMenuItem(
+                value: 'archive',
+                child: Text(context.tr('Archive', 'Архивировать')),
+              ),
+            if (status == 'archived' || status == 'inactive')
+              PopupMenuItem(
+                value: 'reactivate',
+                child: Text(context.tr('Reactivate', 'Активировать')),
+              ),
+            PopupMenuItem(
+              value: 'delete',
+              child: Text(context.tr('Delete', 'Удалить')),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _OwnerStatusBanner extends StatelessWidget {
+  const _OwnerStatusBanner({
+    required this.icon,
+    required this.title,
+    required this.message,
+  });
+
+  final IconData icon;
+  final String title;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.secondaryContainer.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: theme.colorScheme.secondary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(message, style: theme.textTheme.bodySmall),
+              ],
+            ),
           ),
         ],
       ),

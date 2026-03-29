@@ -14,6 +14,8 @@ class ApiEndpoints {
   static String listingDetail(String listingId) => '/listings/$listingId';
   static String publishListing(String listingId) =>
       '/listings/$listingId/publish';
+  static String markListingSold(String listingId) =>
+      '/listings/$listingId/mark-sold';
   static String listingMedia(String listingId) => '/listings/$listingId/media';
   static String listingMediaItem(String listingId, String mediaId) =>
       '/listings/$listingId/media/$mediaId';

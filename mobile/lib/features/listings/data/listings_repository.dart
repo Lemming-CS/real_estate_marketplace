@@ -246,6 +246,16 @@ class ListingsRepository {
     );
   }
 
+  Future<void> markListingSold({
+    required String accessToken,
+    required String listingId,
+  }) async {
+    await _client.postJson(
+      ApiEndpoints.markListingSold(listingId),
+      accessToken: accessToken,
+    );
+  }
+
   Future<void> deleteListing({
     required String accessToken,
     required String listingId,
