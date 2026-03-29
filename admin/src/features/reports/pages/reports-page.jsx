@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-
+import { Link } from 'react-router-dom';
+import React from 'react';
 import { useAuth } from '@/core/auth/auth-context';
 import { QueryState } from '@/shared/components/query-state';
 import { StatusBadge } from '@/shared/components/status-badge';
@@ -76,8 +77,8 @@ export function ReportsPage() {
             </thead>
             <tbody>
               {rows.map((report) => (
-                <>
-                  <tr key={report.public_id}>
+                <React.Fragment key={report.public_id}>
+                  <tr>
                     <td>
                       <strong>{report.reason_code}</strong>
                       <div className="muted-text">
@@ -100,12 +101,41 @@ export function ReportsPage() {
                       {report.listing_title ??
                         report.reported_username ??
                         'Unknown target'}
+                      <div className="muted-text">
+                        {report.listing_public_id ? (
+                          <Link
+                            className="inline-link"
+                            to={`/conversations?listing_public_id=${report.listing_public_id}`}
+                          >
+                            Review listing conversations
+                          </Link>
+                        ) : null}
+                        {report.reported_user_public_id ? (
+                          <>
+                            {report.listing_public_id ? ' • ' : null}
+                            <Link
+                              className="inline-link"
+                              to={`/conversations?user_public_id=${report.reported_user_public_id}`}
+                            >
+                              Review user conversations
+                            </Link>
+                          </>
+                        ) : null}
+                      </div>
                     </td>
                   </tr>
 
                   <tr className="actions-row">
-                    <td colSpan={5}>
+                    <td colSpan={6}>
                       <div className="table-actions">
+                        {report.conversation_public_id ? (
+                          <Link
+                            className="secondary-button"
+                            to={`/conversations?listing_public_id=${report.listing_public_id ?? ''}&user_public_id=${report.reported_user_public_id ?? ''}`}
+                          >
+                            Open Message Review
+                          </Link>
+                        ) : null}
                         <button
                         className="secondary-button"
                           onClick={() =>
@@ -178,7 +208,7 @@ export function ReportsPage() {
                       </div>
                     </td>
                   </tr>
-                </>
+                </React.Fragment>
               ))}
             </tbody>
           </table>

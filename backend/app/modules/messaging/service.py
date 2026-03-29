@@ -9,6 +9,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
+from sqlalchemy import case
 
 from app.core.auth import utcnow
 from app.core.config import Settings
@@ -136,7 +137,15 @@ def list_conversations(session: Session, *, actor: User, page: int, page_size: i
             Conversation.deleted_at.is_(None),
             or_(Conversation.buyer_user_id == actor.id, Conversation.seller_user_id == actor.id),
         )
-        .order_by(Conversation.last_message_at.desc().nullslast(), Conversation.updated_at.desc(), Conversation.id.desc())
+        .order_by(
+    case(
+        (Conversation.last_message_at == None, 1),
+        else_=0,
+    ),
+    Conversation.last_message_at.desc(),
+    Conversation.updated_at.desc(),
+    Conversation.id.desc(),
+)
     )
     total_items = session.execute(select(func.count()).select_from(base_query.subquery())).scalar_one()
     conversations = session.execute(

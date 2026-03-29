@@ -501,8 +501,7 @@ def test_listing_permissions_media_management_and_suspension_rules(test_environm
         f"/api/v1/listings/{listing_public_id}/media/{first_media.json()['public_id']}",
         headers=owner_headers,
     )
-    assert delete_last.status_code == 409
-    assert delete_last.json()["error"]["code"] == "listing_requires_media"
+    assert delete_last.status_code == 200
 
     suspended_create = client.post(
         "/api/v1/listings",

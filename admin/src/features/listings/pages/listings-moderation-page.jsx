@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 
 import { useAuth } from '@/core/auth/auth-context';
 import { QueryState } from '@/shared/components/query-state';
@@ -90,6 +91,12 @@ export function ListingsModerationPage() {
                   <td>{listing.seller.full_name}</td>
                   <td>{listing.price_amount} {listing.currency_code}</td>
                   <td className="table-actions">
+                    <Link
+                      className="secondary-button"
+                      to={`/conversations?listing_public_id=${listing.public_id}`}
+                    >
+                      Messages
+                    </Link>
                     <button className="secondary-button" type="button" onClick={() => reviewMutation.mutate({ listingPublicId: listing.public_id, action: 'publish' })}>
                       Publish
                     </button>

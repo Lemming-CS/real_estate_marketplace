@@ -129,18 +129,30 @@ class ListingsRepository {
     return ListingDetail.fromJson(json);
   }
 
-  Future<void> uploadListingImages({
+  Future<void> uploadListingMedia({
     required String accessToken,
     required String listingId,
-    required List<File> images,
+    required List<File> files,
   }) async {
-    for (final file in images) {
+    for (final file in files) {
       await _client.postMultipart(
         ApiEndpoints.listingMedia(listingId),
         accessToken: accessToken,
         files: [file],
       );
     }
+  }
+
+  Future<void> uploadListingImages({
+    required String accessToken,
+    required String listingId,
+    required List<File> images,
+  }) {
+    return uploadListingMedia(
+      accessToken: accessToken,
+      listingId: listingId,
+      files: images,
+    );
   }
 
   Future<ListingMedia> replaceListingImage({

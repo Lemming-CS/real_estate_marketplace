@@ -1,5 +1,7 @@
 import 'package:electronics_marketplace_mobile/features/auth/presentation/controllers/auth_controller.dart';
 import 'package:electronics_marketplace_mobile/features/auth/presentation/screens/forgot_password_screen.dart';
+import 'package:electronics_marketplace_mobile/features/commerce/presentation/screens/commerce_history_screen.dart';
+import 'package:electronics_marketplace_mobile/features/commerce/presentation/screens/promote_listing_screen.dart';
 import 'package:electronics_marketplace_mobile/features/home/presentation/screens/home_screen.dart';
 import 'package:electronics_marketplace_mobile/features/auth/presentation/screens/login_screen.dart';
 import 'package:electronics_marketplace_mobile/features/auth/presentation/screens/register_screen.dart';
@@ -9,7 +11,11 @@ import 'package:electronics_marketplace_mobile/features/listings/presentation/sc
 import 'package:electronics_marketplace_mobile/features/listings/presentation/screens/my_listings_screen.dart';
 import 'package:electronics_marketplace_mobile/features/listings/presentation/screens/public_user_listings_screen.dart';
 import 'package:electronics_marketplace_mobile/features/listings/presentation/screens/public_user_profile_screen.dart';
+import 'package:electronics_marketplace_mobile/features/messaging/presentation/screens/conversation_detail_screen.dart';
+import 'package:electronics_marketplace_mobile/features/messaging/presentation/screens/conversations_screen.dart';
+import 'package:electronics_marketplace_mobile/features/notifications/presentation/screens/notifications_screen.dart';
 import 'package:electronics_marketplace_mobile/features/profile/presentation/screens/profile_screen.dart';
+import 'package:electronics_marketplace_mobile/features/reports/presentation/screens/my_reports_screen.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -21,8 +27,14 @@ final routerProvider = Provider<GoRouter>((ref) {
     return location == '/favorites' ||
         location == '/my-listings' ||
         location == '/create-listing' ||
+        location == '/conversations' ||
+        location == '/notifications' ||
+        location == '/commerce-history' ||
+        location == '/my-reports' ||
         location == '/profile' ||
-        location.startsWith('/edit-listing/');
+        location.startsWith('/edit-listing/') ||
+        location.startsWith('/conversations/') ||
+        location.startsWith('/promote-listing/');
   }
 
   return GoRouter(
@@ -85,6 +97,28 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const FavoritesScreen(),
       ),
       GoRoute(
+        path: '/conversations',
+        builder: (context, state) => const ConversationsScreen(),
+      ),
+      GoRoute(
+        path: '/conversations/:conversationId',
+        builder: (context, state) => ConversationDetailScreen(
+          conversationId: state.pathParameters['conversationId']!,
+        ),
+      ),
+      GoRoute(
+        path: '/notifications',
+        builder: (context, state) => const NotificationsScreen(),
+      ),
+      GoRoute(
+        path: '/commerce-history',
+        builder: (context, state) => const CommerceHistoryScreen(),
+      ),
+      GoRoute(
+        path: '/my-reports',
+        builder: (context, state) => const MyReportsScreen(),
+      ),
+      GoRoute(
         path: '/my-listings',
         builder: (context, state) => const MyListingsScreen(),
       ),
@@ -96,6 +130,12 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/edit-listing/:listingId',
         builder: (context, state) => ListingFormScreen(
           listingId: state.pathParameters['listingId'],
+        ),
+      ),
+      GoRoute(
+        path: '/promote-listing/:listingId',
+        builder: (context, state) => PromoteListingScreen(
+          listingId: state.pathParameters['listingId']!,
         ),
       ),
       GoRoute(

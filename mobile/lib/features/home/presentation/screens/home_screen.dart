@@ -3,6 +3,9 @@ import 'package:electronics_marketplace_mobile/core/localization/app_strings.dar
 import 'package:electronics_marketplace_mobile/features/auth/presentation/controllers/auth_controller.dart';
 import 'package:electronics_marketplace_mobile/features/listings/domain/listing_filters.dart';
 import 'package:electronics_marketplace_mobile/features/listings/presentation/controllers/listing_providers.dart';
+import 'package:electronics_marketplace_mobile/features/messaging/presentation/controllers/messaging_providers.dart';
+import 'package:electronics_marketplace_mobile/features/notifications/presentation/controllers/notification_providers.dart';
+import 'package:electronics_marketplace_mobile/shared/widgets/badge_icon_button.dart';
 import 'package:electronics_marketplace_mobile/shared/widgets/listing_card.dart';
 import 'package:electronics_marketplace_mobile/shared/widgets/marketplace_shell_scaffold.dart';
 import 'package:flutter/material.dart';
@@ -36,14 +39,36 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget build(BuildContext context) {
     final listingsAsync = ref.watch(homeListingsProvider);
     final filters = ref.watch(homeListingFiltersProvider);
+
     final isAuthenticated = ref.watch(
       authControllerProvider.select((state) => state.isAuthenticated),
     );
 
+    final unreadMessages = isAuthenticated
+        ? (ref.watch(conversationUnreadBadgeProvider).value ?? 0)
+        : 0;
+
+    final unreadNotifications = isAuthenticated
+        ? (ref.watch(notificationUnreadCountProvider).value ?? 0)
+        : 0;
     return MarketplaceShellScaffold(
       currentIndex: 0,
       title: AppConfig.appName,
       actions: [
+        if (isAuthenticated)
+          BadgeIconButton(
+            icon: Icons.chat_bubble_outline,
+            count: unreadMessages,
+            tooltip: context.tr('Inbox', 'Сообщения'),
+            onPressed: () => context.push('/conversations'),
+          ),
+        if (isAuthenticated)
+          BadgeIconButton(
+            icon: Icons.notifications_none,
+            count: unreadNotifications,
+            tooltip: context.tr('Notifications', 'Уведомления'),
+            onPressed: () => context.push('/notifications'),
+          ),
         PopupMenuButton<String>(
           onSelected: (value) {
             if (value == 'login') {

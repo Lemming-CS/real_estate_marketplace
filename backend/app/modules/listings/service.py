@@ -174,6 +174,7 @@ def create_listing(
     session.flush()
 
     _replace_attribute_values(
+        session=session,
         listing=listing,
         category=category,
         attribute_inputs=payload.attribute_values,

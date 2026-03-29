@@ -71,6 +71,24 @@ class ListingCard extends StatelessWidget {
                         ),
                       ),
                     ),
+                  if (listing.primaryMedia?.isVideo ?? false)
+                    Positioned(
+                      right: 12,
+                      bottom: 12,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: const Padding(
+                          padding: EdgeInsets.all(8),
+                          child: Icon(
+                            Icons.play_arrow,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
                 ],
               ),
               const SizedBox(height: 12),
@@ -98,7 +116,7 @@ class ListingCard extends StatelessWidget {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          [listing.district, listing.city]
+                          [listing.mapLabel, listing.district, listing.city]
                               .whereType<String>()
                               .where((item) => item.isNotEmpty)
                               .join(', '),

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from math import ceil
+from pathlib import Path
 
-from sqlalchemy import func, or_, select
+from fastapi.responses import FileResponse
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.core.auth import utcnow
+from app.core.config import Settings
 from app.core.exceptions import AppError
 from app.db.enums import ListingStatus, PaymentStatus, PaymentType, PromotionStatus, ReportStatus, RoleCode, UserStatus
 from app.db.models import (
@@ -14,6 +17,7 @@ from app.db.models import (
     Conversation,
     Listing,
     Message,
+    MessageAttachment,
     PaymentRecord,
     Promotion,
     Report,
@@ -378,7 +382,15 @@ def list_scoped_conversations(
         select(Conversation)
         .options(joinedload(Conversation.listing), joinedload(Conversation.buyer), joinedload(Conversation.seller))
         .where(*scope, Conversation.deleted_at.is_(None))
-        .order_by(Conversation.last_message_at.desc().nullslast(), Conversation.created_at.desc(), Conversation.id.desc())
+        .order_by(
+            case(
+                (Conversation.last_message_at.is_(None), 1),
+                else_=0,
+            ),
+            Conversation.last_message_at.desc(),
+            Conversation.created_at.desc(),
+            Conversation.id.desc(),
+        )
     )
     total_items = _count(session, select(Conversation.id).select_from(base_query.subquery()))
     conversations = session.execute(
@@ -411,24 +423,13 @@ def get_scoped_conversation_detail(
     listing_public_id: str | None,
     user_public_id: str | None,
 ) -> AdminConversationReviewDetailSchema:
-    scope = _conversation_scope_filters(session, listing_public_id=listing_public_id, user_public_id=user_public_id)
-    conversation = session.execute(
-        select(Conversation)
-        .options(
-            joinedload(Conversation.listing),
-            joinedload(Conversation.buyer),
-            joinedload(Conversation.seller),
-            selectinload(Conversation.messages).joinedload(Message.sender),
-            selectinload(Conversation.messages).selectinload(Message.attachments),
-        )
-        .where(Conversation.public_id == conversation_public_id, Conversation.deleted_at.is_(None), *scope)
-    ).scalar_one_or_none()
-    if conversation is None:
-        raise AppError(
-            status_code=404,
-            code="conversation_review_not_found",
-            message="Conversation was not found for the provided review scope.",
-        )
+    conversation = _get_scoped_review_conversation_or_404(
+        session,
+        conversation_public_id=conversation_public_id,
+        listing_public_id=listing_public_id,
+        user_public_id=user_public_id,
+        include_messages=True,
+    )
 
     message_count = _message_count_map(session, conversation_ids=[conversation.id]).get(conversation.id, 0)
     return AdminConversationReviewDetailSchema(
@@ -453,6 +454,7 @@ def get_scoped_conversation_detail(
                         public_id=attachment.public_id,
                         file_name=attachment.file_name,
                         mime_type=attachment.mime_type,
+                        download_url=f"/admin/conversations/{conversation.public_id}/attachments/{attachment.public_id}",
                     )
                     for attachment in message.attachments
                 ],
@@ -460,6 +462,53 @@ def get_scoped_conversation_detail(
             for message in sorted(conversation.messages, key=lambda item: (item.created_at, item.id))
             if message.deleted_at is None
         ],
+    )
+
+
+def download_scoped_conversation_attachment(
+    session: Session,
+    *,
+    settings: Settings,
+    conversation_public_id: str,
+    attachment_public_id: str,
+    listing_public_id: str | None,
+    user_public_id: str | None,
+) -> FileResponse:
+    conversation = _get_scoped_review_conversation_or_404(
+        session,
+        conversation_public_id=conversation_public_id,
+        listing_public_id=listing_public_id,
+        user_public_id=user_public_id,
+        include_messages=False,
+    )
+    attachment = session.execute(
+        select(MessageAttachment)
+        .join(Message, Message.id == MessageAttachment.message_id)
+        .where(
+            Message.conversation_id == conversation.id,
+            Message.deleted_at.is_(None),
+            MessageAttachment.public_id == attachment_public_id,
+        )
+    ).scalar_one_or_none()
+    if attachment is None:
+        raise AppError(
+            status_code=404,
+            code="message_attachment_not_found",
+            message="Message attachment was not found.",
+        )
+
+    absolute_path = _safe_storage_path(settings=settings, storage_key=attachment.storage_key)
+    if not absolute_path.exists():
+        raise AppError(
+            status_code=404,
+            code="message_attachment_missing",
+            message="Stored attachment file is missing.",
+        )
+
+    return FileResponse(
+        path=absolute_path,
+        media_type=attachment.mime_type,
+        filename=attachment.file_name,
     )
 
 
@@ -534,6 +583,61 @@ def _conversation_scope_filters(
         user = _get_user_or_404(session, user_public_id=user_public_id)
         filters.append(or_(Conversation.buyer_user_id == user.id, Conversation.seller_user_id == user.id))
     return filters
+
+
+def _get_scoped_review_conversation_or_404(
+    session: Session,
+    *,
+    conversation_public_id: str,
+    listing_public_id: str | None,
+    user_public_id: str | None,
+    include_messages: bool,
+) -> Conversation:
+    scope = _conversation_scope_filters(
+        session,
+        listing_public_id=listing_public_id,
+        user_public_id=user_public_id,
+    )
+    options = [
+        joinedload(Conversation.listing),
+        joinedload(Conversation.buyer),
+        joinedload(Conversation.seller),
+    ]
+    if include_messages:
+        options.extend(
+            [
+                selectinload(Conversation.messages).joinedload(Message.sender),
+                selectinload(Conversation.messages).selectinload(Message.attachments),
+            ]
+        )
+    conversation = session.execute(
+        select(Conversation)
+        .options(*options)
+        .where(
+            Conversation.public_id == conversation_public_id,
+            Conversation.deleted_at.is_(None),
+            *scope,
+        )
+    ).scalar_one_or_none()
+    if conversation is None:
+        raise AppError(
+            status_code=404,
+            code="conversation_review_not_found",
+            message="Conversation was not found for the provided review scope.",
+        )
+    return conversation
+
+
+def _safe_storage_path(*, settings: Settings, storage_key: str) -> Path:
+    base_path = Path(settings.media_storage_path).resolve()
+    target_path = (base_path / storage_key).resolve()
+    if base_path not in target_path.parents and target_path != base_path:
+        raise AppError(
+            status_code=400,
+            code="invalid_attachment_path",
+            message="Invalid attachment path.",
+        )
+    return target_path
 
 
 def _pagination_meta(*, page: int, page_size: int, total_items: int) -> PaginationMetaSchema:

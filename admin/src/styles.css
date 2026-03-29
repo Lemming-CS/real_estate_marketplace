@@ -491,7 +491,10 @@ a {
   color: var(--accent);
   font-weight: 600;
 }
-
+img {
+  max-width: 400px;
+  max-height: 400px;
+}
 .conversation-thread {
   display: flex;
   flex-direction: column;

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.core.auth import utcnow
 from app.core.exceptions import AppError
 from app.db.enums import ListingStatus, ReportStatus, UserStatus
-from app.db.models import Listing, Report, User, UserStatusHistory
+from app.db.models import Conversation, Listing, Report, User, UserStatusHistory
 from app.modules.reports.schemas import PaginatedReportsResponseSchema, ReportActionRequest, ReportCreateRequest, ReportSchema
 from app.shared.audit import record_admin_audit_log
 from app.shared.schemas import PaginationMetaSchema
@@ -18,6 +18,7 @@ def create_report(session: Session, *, reporter: User, payload: ReportCreateRequ
     normalized_reason_code = payload.reason_code.strip().lower()
     listing = None
     reported_user = None
+    conversation = None
 
     if payload.listing_public_id:
         listing = session.execute(
@@ -28,6 +29,31 @@ def create_report(session: Session, *, reporter: User, payload: ReportCreateRequ
         if listing is None:
             raise AppError(status_code=404, code="listing_not_found", message="Listing was not found.")
         reported_user = listing.seller
+
+    if payload.conversation_public_id:
+        conversation = session.execute(
+            select(Conversation)
+            .options(
+                joinedload(Conversation.listing).joinedload(Listing.seller),
+                joinedload(Conversation.buyer),
+                joinedload(Conversation.seller),
+            )
+            .where(Conversation.public_id == payload.conversation_public_id, Conversation.deleted_at.is_(None))
+        ).scalar_one_or_none()
+        if conversation is None:
+            raise AppError(status_code=404, code="conversation_not_found", message="Conversation was not found.")
+        if reporter.id not in {conversation.buyer_user_id, conversation.seller_user_id}:
+            raise AppError(
+                status_code=403,
+                code="conversation_report_forbidden",
+                message="You can only report conversations you participate in.",
+            )
+        listing = conversation.listing or listing
+        reported_user = (
+            conversation.seller
+            if reporter.id == conversation.buyer_user_id
+            else conversation.buyer
+        )
 
     if payload.reported_user_public_id:
         reported_user = session.execute(
@@ -45,6 +71,19 @@ def create_report(session: Session, *, reporter: User, payload: ReportCreateRequ
             code="report_target_mismatch",
             message="The reported user does not match the listing owner.",
         )
+    if conversation is not None:
+        if payload.listing_public_id and conversation.listing_id != listing.id:
+            raise AppError(
+                status_code=400,
+                code="report_target_mismatch",
+                message="The conversation does not match the selected listing.",
+            )
+        if payload.reported_user_public_id and conversation.buyer_user_id != reported_user.id and conversation.seller_user_id != reported_user.id:
+            raise AppError(
+                status_code=400,
+                code="report_target_mismatch",
+                message="The conversation does not include the reported user.",
+            )
 
     existing = session.execute(
         select(Report)
@@ -52,6 +91,7 @@ def create_report(session: Session, *, reporter: User, payload: ReportCreateRequ
             Report.reporter_user_id == reporter.id,
             Report.reported_user_id == (reported_user.id if reported_user else None),
             Report.listing_id == (listing.id if listing else None),
+            Report.conversation_id == (conversation.id if conversation else None),
             Report.reason_code == normalized_reason_code,
             Report.status.in_([ReportStatus.OPEN, ReportStatus.IN_REVIEW]),
         )
@@ -64,6 +104,7 @@ def create_report(session: Session, *, reporter: User, payload: ReportCreateRequ
         reporter_user_id=reporter.id,
         reported_user_id=reported_user.id if reported_user else None,
         listing_id=listing.id if listing else None,
+        conversation_id=conversation.id if conversation else None,
         reason_code=normalized_reason_code,
         description=payload.description.strip() if payload.description else None,
         status=ReportStatus.OPEN,
@@ -183,6 +224,7 @@ def _report_query() -> Select[tuple[Report]]:
         joinedload(Report.reporter_user),
         joinedload(Report.reported_user),
         joinedload(Report.listing),
+        joinedload(Report.conversation),
     )
 
 
@@ -223,6 +265,7 @@ def _build_report_schema(report: Report) -> ReportSchema:
         reporter_username=reporter.username,
         reported_user_public_id=reported_user.public_id if reported_user else None,
         reported_username=reported_user.username if reported_user else None,
+        conversation_public_id=report.conversation.public_id if report.conversation else None,
         listing_public_id=listing.public_id if listing else None,
         listing_title=listing.title if listing else None,
         listing_status=listing.status if listing else None,
@@ -243,6 +286,7 @@ def _report_snapshot(report: Report) -> dict[str, str | None]:
         "public_id": report.public_id,
         "status": report.status.value,
         "reason_code": report.reason_code,
+        "conversation_public_id": report.conversation.public_id if report.conversation else None,
         "listing_public_id": report.listing.public_id if report.listing else None,
         "reported_user_public_id": report.reported_user.public_id if report.reported_user else None,
     }

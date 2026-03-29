@@ -78,6 +78,10 @@ class MyListingsScreen extends ConsumerWidget {
                       context.push('/edit-listing/${listing.publicId}');
                       return;
                     }
+                    if (action == 'promote') {
+                      context.push('/promote-listing/${listing.publicId}');
+                      return;
+                    }
                     if (action == 'publish') {
                       await repository.publishListing(
                           accessToken: token, listingId: listing.publicId);
@@ -100,6 +104,11 @@ class MyListingsScreen extends ConsumerWidget {
                     PopupMenuItem(
                         value: 'edit',
                         child: Text(context.tr('Edit', 'Редактировать'))),
+                    if (listing.status == 'published')
+                      PopupMenuItem(
+                        value: 'promote',
+                        child: Text(context.tr('Promote', 'Продвинуть')),
+                      ),
                     if (listing.status == 'draft' ||
                         listing.status == 'inactive')
                       PopupMenuItem(

@@ -38,6 +38,32 @@ class ApiClient {
     return _decodeMap(response);
   }
 
+  Future<Map<String, dynamic>> getAbsoluteJson(
+    String url, {
+    String? accessToken,
+  }) async {
+    final response = await _client.get(
+      Uri.parse(url),
+      headers: _headers(accessToken: accessToken),
+    );
+    return _decodeMap(response);
+  }
+
+  Future<List<int>> getAbsoluteBytes(
+    String url, {
+    String? accessToken,
+  }) async {
+    final response = await _client.get(
+      Uri.parse(url),
+      headers: _headers(accessToken: accessToken),
+    );
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return response.bodyBytes;
+    }
+    _decode(response);
+    return const [];
+  }
+
   Future<List<dynamic>> getJsonList(
     String path, {
     String? accessToken,
@@ -209,13 +235,36 @@ class ApiClient {
   }
 
   dynamic _decode(http.Response response) {
-    final body = response.body.isEmpty ? null : jsonDecode(response.body);
+    final raw = response.body.trim();
+
+    dynamic body;
+
+    if (raw.isEmpty) {
+      body = null;
+    } else {
+      try {
+        body = jsonDecode(raw);
+      } on FormatException {
+        debugPrint(
+          'Non-JSON response from ${response.request?.url}: ${raw.substring(0, raw.length > 200 ? 200 : raw.length)}',
+        );
+
+        throw ApiException(
+          'Server returned invalid response format.',
+          code: 'invalid_response',
+          statusCode: response.statusCode,
+        );
+      }
+    }
+
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return body;
     }
+
     debugPrint(
-      'HTTP ${response.statusCode} ${response.request?.url}: ${response.body}',
+      'HTTP ${response.statusCode} ${response.request?.url}: $raw',
     );
+
     if (body is Map<String, dynamic> && body['error'] is Map<String, dynamic>) {
       final error = body['error'] as Map<String, dynamic>;
       throw ApiException(
@@ -224,12 +273,14 @@ class ApiClient {
         statusCode: response.statusCode,
       );
     }
+
     if (body is Map<String, dynamic>) {
       throw ApiException(
         'Request failed with status ${response.statusCode}: ${jsonEncode(body)}',
         statusCode: response.statusCode,
       );
     }
+
     throw ApiException(
       'Request failed with status ${response.statusCode}.',
       statusCode: response.statusCode,

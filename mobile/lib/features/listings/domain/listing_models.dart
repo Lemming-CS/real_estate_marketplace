@@ -127,6 +127,61 @@ class ListingAttributeValue {
       );
 }
 
+class ListingPromotionState {
+  const ListingPromotionState({
+    required this.publicId,
+    required this.packageName,
+    required this.packageCode,
+    required this.status,
+    required this.durationDays,
+    required this.priceAmount,
+    required this.currencyCode,
+    this.targetCity,
+    this.targetCategoryPublicId,
+    this.targetCategoryName,
+    this.startsAt,
+    this.endsAt,
+    this.activatedAt,
+  });
+
+  final String publicId;
+  final String packageName;
+  final String? packageCode;
+  final String status;
+  final int durationDays;
+  final String priceAmount;
+  final String? currencyCode;
+  final String? targetCity;
+  final String? targetCategoryPublicId;
+  final String? targetCategoryName;
+  final DateTime? startsAt;
+  final DateTime? endsAt;
+  final DateTime? activatedAt;
+
+  factory ListingPromotionState.fromJson(Map<String, dynamic> json) =>
+      ListingPromotionState(
+        publicId: json['public_id'] as String,
+        packageName: json['package_name'] as String,
+        packageCode: json['package_code'] as String?,
+        status: json['status'] as String,
+        durationDays: parseInt(json['duration_days']) ?? 0,
+        priceAmount: (parseDouble(json['price_amount']) ?? 0).toString(),
+        currencyCode: json['currency_code'] as String?,
+        targetCity: json['target_city'] as String?,
+        targetCategoryPublicId: json['target_category_public_id'] as String?,
+        targetCategoryName: json['target_category_name'] as String?,
+        startsAt: json['starts_at'] == null
+            ? null
+            : DateTime.parse(json['starts_at'] as String),
+        endsAt: json['ends_at'] == null
+            ? null
+            : DateTime.parse(json['ends_at'] as String),
+        activatedAt: json['activated_at'] == null
+            ? null
+            : DateTime.parse(json['activated_at'] as String),
+      );
+}
+
 class OwnerCard {
   const OwnerCard({
     required this.publicId,
@@ -174,6 +229,7 @@ class ListingSummary {
     required this.category,
     required this.seller,
     required this.isPromoted,
+    this.promotionState,
     this.district,
     this.mapLabel,
     this.floor,
@@ -203,6 +259,7 @@ class ListingSummary {
   final SellerSummary seller;
   final ListingMedia? primaryMedia;
   final bool isPromoted;
+  final ListingPromotionState? promotionState;
 
   factory ListingSummary.fromJson(Map<String, dynamic> json) => ListingSummary(
         publicId: json['public_id'] as String,
@@ -230,6 +287,11 @@ class ListingSummary {
             : ListingMedia.fromJson(
                 json['primary_media'] as Map<String, dynamic>),
         isPromoted: json['is_promoted'] as bool? ?? false,
+        promotionState: json['promotion_state'] == null
+            ? null
+            : ListingPromotionState.fromJson(
+                json['promotion_state'] as Map<String, dynamic>,
+              ),
       );
 }
 
@@ -255,12 +317,14 @@ class ListingDetail extends ListingSummary {
     required this.owner,
     required this.mediaItems,
     required this.attributeValues,
+    this.moderationNote,
     super.district,
     super.mapLabel,
     super.floor,
     super.totalFloors,
     super.furnished,
     super.primaryMedia,
+    super.promotionState,
   });
 
   final String description;
@@ -268,6 +332,7 @@ class ListingDetail extends ListingSummary {
   final OwnerCard owner;
   final List<ListingMedia> mediaItems;
   final List<ListingAttributeValue> attributeValues;
+  final String? moderationNote;
 
   factory ListingDetail.fromJson(Map<String, dynamic> json) => ListingDetail(
         publicId: json['public_id'] as String,
@@ -295,8 +360,14 @@ class ListingDetail extends ListingSummary {
             : ListingMedia.fromJson(
                 json['primary_media'] as Map<String, dynamic>),
         isPromoted: json['is_promoted'] as bool? ?? false,
+        promotionState: json['promotion_state'] == null
+            ? null
+            : ListingPromotionState.fromJson(
+                json['promotion_state'] as Map<String, dynamic>,
+              ),
         description: json['description'] as String,
         addressText: json['address_text'] as String,
+        moderationNote: json['moderation_note'] as String?,
         owner: OwnerCard.fromJson(json['owner'] as Map<String, dynamic>),
         mediaItems: (json['media_items'] as List<dynamic>? ?? const [])
             .map((item) => ListingMedia.fromJson(item as Map<String, dynamic>))

@@ -5,14 +5,18 @@ import 'package:flutter/material.dart';
 class NetworkMediaImage extends StatelessWidget {
   const NetworkMediaImage({
     super.key,
-    required this.assetKey,
+    this.assetKey,
+    this.requestPath,
+    this.accessToken,
     this.fit = BoxFit.cover,
     this.height,
     this.width,
     this.borderRadius,
-  });
+  }) : assert(assetKey != null || requestPath != null);
 
-  final String assetKey;
+  final String? assetKey;
+  final String? requestPath;
+  final String? accessToken;
   final BoxFit fit;
   final double? height;
   final double? width;
@@ -23,7 +27,7 @@ class NetworkMediaImage extends StatelessWidget {
     final uri = Uri.parse(AppConfig.apiBaseUrl);
     final baseOrigin =
         '${uri.scheme}://${uri.host}${uri.hasPort ? ':${uri.port}' : ''}';
-    final imageUrl = '$baseOrigin/api/v1${ApiEndpoints.media(assetKey)}';
+    final imageUrl = _resolveUrl(baseOrigin);
     return LayoutBuilder(
       builder: (context, constraints) {
         final devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
@@ -38,6 +42,9 @@ class NetworkMediaImage extends StatelessWidget {
 
         final image = Image.network(
           imageUrl,
+          headers: accessToken == null
+              ? null
+              : {'Authorization': 'Bearer $accessToken'},
           fit: fit,
           height: height,
           width: width,
@@ -58,6 +65,20 @@ class NetworkMediaImage extends StatelessWidget {
         return RepaintBoundary(child: content);
       },
     );
+  }
+
+  String _resolveUrl(String baseOrigin) {
+    if (requestPath != null && requestPath!.isNotEmpty) {
+      if (requestPath!.startsWith('http://') ||
+          requestPath!.startsWith('https://')) {
+        return requestPath!;
+      }
+      if (requestPath!.startsWith('/')) {
+        return '$baseOrigin$requestPath';
+      }
+      return '$baseOrigin/$requestPath';
+    }
+    return '$baseOrigin/api/v1${ApiEndpoints.media(assetKey!)}';
   }
 
   double? _resolveDimension(double? preferred, double maxConstraint) {

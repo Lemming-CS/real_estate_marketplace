@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 
 import { useAuth } from '@/core/auth/auth-context';
 import { MetricCard } from '@/shared/components/metric-card';
@@ -43,10 +43,17 @@ export function UserDetailPage() {
               <div>
                 <p className="eyebrow">User Detail</p>
                 <h1>{user.full_name}</h1>
+                <p className="page-copy">@{user.username}</p>
                 <p className="page-copy">{user.email}</p>
               </div>
               <div className="toolbar">
                 <StatusBadge value={user.status} />
+                <Link
+                  className="secondary-button"
+                  to={`/conversations?user_public_id=${user.public_id}`}
+                >
+                  Review Messages
+                </Link>
                 {user.status === 'suspended' ? (
                   <button className="secondary-button" type="button" onClick={() => statusMutation.mutate({ action: 'unsuspend' })}>
                     Unsuspend
@@ -60,6 +67,7 @@ export function UserDetailPage() {
             </header>
 
             <div className="metric-grid">
+              <MetricCard title="Username" value={`@${user.username}`} />
               <MetricCard title="Roles" value={user.roles.join(', ')} />
               <MetricCard title="Listings" value={user.listing_count} note={`${user.active_listing_count} published`} />
               <MetricCard title="Locale" value={user.locale} />

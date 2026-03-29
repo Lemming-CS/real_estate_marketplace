@@ -12,13 +12,14 @@ from app.shared.schemas import PaginationMetaSchema
 class ReportCreateRequest(BaseModel):
     listing_public_id: str | None = None
     reported_user_public_id: str | None = None
+    conversation_public_id: str | None = None
     reason_code: str = Field(min_length=2, max_length=100)
     description: str | None = Field(default=None, max_length=2000)
 
     @model_validator(mode="after")
     def validate_target(self) -> "ReportCreateRequest":
-        if not self.listing_public_id and not self.reported_user_public_id:
-            raise ValueError("A listing or a user target is required.")
+        if not self.listing_public_id and not self.reported_user_public_id and not self.conversation_public_id:
+            raise ValueError("A listing, conversation, or user target is required.")
         return self
 
 
@@ -43,6 +44,7 @@ class ReportSchema(BaseModel):
     reporter_username: str
     reported_user_public_id: str | None = None
     reported_username: str | None = None
+    conversation_public_id: str | None = None
     listing_public_id: str | None = None
     listing_title: str | None = None
     listing_status: ListingStatus | None = None

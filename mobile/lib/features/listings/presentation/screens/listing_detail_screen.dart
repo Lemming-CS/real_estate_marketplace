@@ -3,6 +3,9 @@ import 'package:electronics_marketplace_mobile/features/auth/presentation/contro
 import 'package:electronics_marketplace_mobile/features/listings/data/listings_repository.dart';
 import 'package:electronics_marketplace_mobile/features/listings/domain/listing_models.dart';
 import 'package:electronics_marketplace_mobile/features/listings/presentation/controllers/listing_providers.dart';
+import 'package:electronics_marketplace_mobile/features/messaging/data/messaging_repository.dart';
+import 'package:electronics_marketplace_mobile/features/messaging/presentation/controllers/messaging_providers.dart';
+import 'package:electronics_marketplace_mobile/features/reports/data/reports_repository.dart';
 import 'package:electronics_marketplace_mobile/shared/widgets/map_preview.dart';
 import 'package:electronics_marketplace_mobile/shared/widgets/network_media_image.dart';
 import 'package:flutter/material.dart';
@@ -77,12 +80,46 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
                     ?.copyWith(fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 8),
+              if (_ownerStatusMessage(authState, listing)
+                  case final ownerMessage?) ...[
+                Card(
+                  color: Theme.of(context).colorScheme.secondaryContainer,
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Text(ownerMessage),
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
               if (listing.isPromoted) ...[
                 Align(
                   alignment: Alignment.centerLeft,
                   child: Chip(
                     avatar: const Icon(Icons.workspace_premium, size: 18),
                     label: Text(context.tr('Promoted', 'Продвигается')),
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+              if (listing.promotionState != null) ...[
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.trending_up_outlined),
+                    title: Text(context.tr(
+                      'Promotion is active',
+                      'Продвижение активно',
+                    )),
+                    subtitle: Text(
+                      [
+                        listing.promotionState!.packageName,
+                        if ((listing.promotionState!.targetCity ?? '')
+                            .isNotEmpty)
+                          '${context.tr('City', 'Город')}: ${listing.promotionState!.targetCity}',
+                        if ((listing.promotionState!.targetCategoryName ?? '')
+                            .isNotEmpty)
+                          '${context.tr('Category', 'Категория')}: ${listing.promotionState!.targetCategoryName}',
+                      ].join('\n'),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -113,7 +150,11 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
               Card(
                 child: ListTile(
                   leading: const Icon(Icons.place_outlined),
-                  title: Text([listing.district, listing.city]
+                  title: Text([
+                    if ((listing.mapLabel ?? '').isNotEmpty) listing.mapLabel,
+                    listing.district,
+                    listing.city
+                  ]
                       .whereType<String>()
                       .where((part) => part.isNotEmpty)
                       .join(', ')),
@@ -121,8 +162,14 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
                 ),
               ),
               const SizedBox(height: 12),
+              Text(context.tr('Location', 'Локация'),
+                  style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
               MapPreview(
-                  latitude: listing.latitude, longitude: listing.longitude),
+                latitude: listing.latitude,
+                longitude: listing.longitude,
+                interactive: true,
+              ),
               const SizedBox(height: 16),
               Text(context.tr('Property details', 'Характеристики'),
                   style: Theme.of(context).textTheme.titleMedium),
@@ -158,6 +205,24 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
                       context.push('/seller/${listing.owner.publicId}'),
                 ),
               ),
+              if (!_isOwner(authState, listing)) ...[
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    FilledButton(
+                      onPressed: () => _startConversation(authState, listing),
+                      child: Text(
+                          context.tr('Message seller', 'Написать продавцу')),
+                    ),
+                    OutlinedButton(
+                      onPressed: () => _reportListing(authState, listing),
+                      child: Text(context.tr('Report listing', 'Пожаловаться')),
+                    ),
+                  ],
+                ),
+              ],
               if (_isOwner(authState, listing)) ...[
                 const SizedBox(height: 16),
                 Wrap(
@@ -187,6 +252,12 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
                           ref.invalidate(myListingsProvider);
                         },
                         child: Text(context.tr('Publish', 'Опубликовать')),
+                      ),
+                    if (listing.status == 'published')
+                      FilledButton.tonal(
+                        onPressed: () => context
+                            .push('/promote-listing/${listing.publicId}'),
+                        child: Text(context.tr('Promote', 'Продвинуть')),
                       ),
                   ],
                 ),
@@ -218,6 +289,120 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
           : context.tr('No', 'Нет');
     }
     return attribute.textValue ?? '-';
+  }
+
+  String? _ownerStatusMessage(AuthState authState, ListingDetail listing) {
+    if (!_isOwner(authState, listing)) {
+      return null;
+    }
+    switch (listing.status) {
+      case 'inactive':
+        return context.tr(
+          'This listing is hidden from the public feed. You can edit it or publish it again.',
+          'Это объявление скрыто из публичной выдачи. Вы можете отредактировать его или снова опубликовать.',
+        );
+      case 'archived':
+        return context.tr(
+          'This listing is archived and no longer visible to shoppers.',
+          'Это объявление архивировано и больше не видно покупателям.',
+        );
+      case 'rejected':
+        return [
+          context.tr(
+            'This listing is not publicly visible after moderation.',
+            'Это объявление не видно публично после модерации.',
+          ),
+          if ((listing.moderationNote ?? '').isNotEmpty)
+            listing.moderationNote!,
+        ].join('\n');
+      case 'draft':
+        return context.tr(
+          'This listing is still a draft. Publish it when you are ready.',
+          'Это объявление пока в черновике. Опубликуйте его, когда будете готовы.',
+        );
+      default:
+        return null;
+    }
+  }
+
+  Future<void> _startConversation(
+    AuthState authState,
+    ListingDetail listing,
+  ) async {
+    if (!authState.isAuthenticated) {
+      if (mounted) {
+        context.push('/login');
+      }
+      return;
+    }
+    final messagingRepository = ref.read(messagingRepositoryProvider);
+    final initialMessage = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => const _ConversationStartSheet(),
+    );
+    if (!mounted || initialMessage == null) {
+      return;
+    }
+    try {
+      final conversation = await messagingRepository.createOrReopenFromListing(
+        accessToken: authState.session!.accessToken,
+        listingId: listing.publicId,
+        initialMessage: initialMessage,
+      );
+      if (!mounted) {
+        return;
+      }
+      ref.invalidate(inboxProvider);
+      context.push('/conversations/${conversation.publicId}');
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.toString())));
+    }
+  }
+
+  Future<void> _reportListing(
+      AuthState authState, ListingDetail listing) async {
+    if (!authState.isAuthenticated) {
+      if (mounted) {
+        context.push('/login');
+      }
+      return;
+    }
+    final reportsRepository = ref.read(reportsRepositoryProvider);
+    final draft = await showModalBottomSheet<_ListingReportDraft>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => const _ListingReportSheet(),
+    );
+    if (!mounted || draft == null) {
+      return;
+    }
+    try {
+      await reportsRepository.createListingReport(
+        accessToken: authState.session!.accessToken,
+        listingId: listing.publicId,
+        reasonCode: draft.reasonCode,
+        description: draft.description,
+      );
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(context.tr('Report submitted.', 'Жалоба отправлена.')),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.toString())));
+    }
   }
 }
 
@@ -326,11 +511,27 @@ class _MediaGallery extends StatelessWidget {
                   ),
                 );
               }
-              return NetworkMediaImage(
-                assetKey: item.assetKey,
-                height: 240,
-                width: double.infinity,
-                borderRadius: BorderRadius.circular(20),
+              return Stack(
+                children: [
+                  NetworkMediaImage(
+                    assetKey: item.assetKey,
+                    height: 240,
+                    width: double.infinity,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  if (item.isVideo)
+                    const Positioned(
+                      right: 12,
+                      bottom: 12,
+                      child: CircleAvatar(
+                        backgroundColor: Colors.black54,
+                        child: Icon(
+                          Icons.play_arrow,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                ],
               );
             },
           ),
@@ -368,5 +569,176 @@ class _InfoChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Chip(label: Text(label));
+  }
+}
+
+class _ConversationStartSheet extends StatefulWidget {
+  const _ConversationStartSheet();
+
+  @override
+  State<_ConversationStartSheet> createState() =>
+      _ConversationStartSheetState();
+}
+
+class _ConversationStartSheetState extends State<_ConversationStartSheet> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 16,
+        right: 16,
+        top: 16,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+      ),
+      child: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                context.tr('Message seller', 'Написать продавцу'),
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _controller,
+                minLines: 3,
+                maxLines: 5,
+                decoration: InputDecoration(
+                  hintText: context.tr(
+                    'Introduce yourself or ask about the property',
+                    'Представьтесь или спросите о недвижимости',
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () => Navigator.of(context).pop(_controller.text),
+                  child: Text(context.tr('Open chat', 'Открыть чат')),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ListingReportDraft {
+  const _ListingReportDraft({
+    required this.reasonCode,
+    this.description,
+  });
+
+  final String reasonCode;
+  final String? description;
+}
+
+class _ListingReportSheet extends StatefulWidget {
+  const _ListingReportSheet();
+
+  @override
+  State<_ListingReportSheet> createState() => _ListingReportSheetState();
+}
+
+class _ListingReportSheetState extends State<_ListingReportSheet> {
+  late final TextEditingController _descriptionController;
+  String _selectedReason = 'inaccurate';
+
+  @override
+  void initState() {
+    super.initState();
+    _descriptionController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _descriptionController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 16,
+        right: 16,
+        top: 16,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+      ),
+      child: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                context.tr('Report listing', 'Пожаловаться'),
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: _selectedReason,
+                items: const [
+                  DropdownMenuItem(
+                      value: 'inaccurate', child: Text('Inaccurate')),
+                  DropdownMenuItem(value: 'spam', child: Text('Spam')),
+                  DropdownMenuItem(value: 'scam', child: Text('Scam')),
+                  DropdownMenuItem(value: 'abuse', child: Text('Abuse')),
+                ],
+                onChanged: (value) => setState(
+                  () => _selectedReason = value ?? 'inaccurate',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _descriptionController,
+                minLines: 3,
+                maxLines: 5,
+                decoration: InputDecoration(
+                  hintText: context.tr(
+                    'Add details for moderation',
+                    'Добавьте детали для модерации',
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () {
+                    Navigator.of(context).pop(
+                      _ListingReportDraft(
+                        reasonCode: _selectedReason,
+                        description: _descriptionController.text,
+                      ),
+                    );
+                  },
+                  child: Text(context.tr('Submit report', 'Отправить жалобу')),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

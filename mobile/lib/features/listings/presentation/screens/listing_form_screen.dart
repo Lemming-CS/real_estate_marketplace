@@ -55,6 +55,7 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
   String? _submitError;
   AutovalidateMode _autovalidateMode = AutovalidateMode.disabled;
   final List<File> _selectedImages = [];
+  File? _selectedVideo;
   final List<ListingMedia> _existingMedia = [];
   late final Listenable _formInputsListenable;
   late final Listenable _locationInputsListenable;
@@ -588,6 +589,49 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
                             ),
                           ],
                         ),
+                      if (_selectedVideo != null)
+                        Stack(
+                          children: [
+                            Container(
+                              width: 88,
+                              height: 88,
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade200,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              alignment: Alignment.center,
+                              child: const Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.videocam_outlined),
+                                  SizedBox(height: 4),
+                                  Text('MP4'),
+                                ],
+                              ),
+                            ),
+                            Positioned(
+                              top: 4,
+                              right: 4,
+                              child: CircleAvatar(
+                                radius: 14,
+                                backgroundColor: Colors.black54,
+                                child: IconButton(
+                                  padding: EdgeInsets.zero,
+                                  onPressed: _isSubmitting
+                                      ? null
+                                      : () => setState(() {
+                                            _selectedVideo = null;
+                                          }),
+                                  icon: const Icon(
+                                    Icons.close,
+                                    size: 14,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                     ],
                   ),
                   if (existingMedia.isNotEmpty) ...[
@@ -740,10 +784,23 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
                     label: Text(context.tr('Add photos', 'Добавить фото')),
                   ),
                   const SizedBox(height: 12),
+                  FilledButton.tonalIcon(
+                    onPressed: _isSubmitting ? null : _pickVideo,
+                    icon: const Icon(Icons.video_library_outlined),
+                    label: Text(
+                      _selectedVideo == null
+                          ? context.tr('Add video tour', 'Добавить видео-тур')
+                          : context.tr(
+                              'Replace video tour',
+                              'Заменить видео-тур',
+                            ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                   Text(
                     context.tr(
-                      'Video tours are supported by the backend, but the mobile upload/display UI is intentionally deferred to the next prompt.',
-                      'Видео-тур поддерживается бэкендом, но мобильный интерфейс загрузки и показа отложен до следующего шага.',
+                      'Media is optional. You can upload photos and one optional short MP4 video tour.',
+                      'Медиа необязательно. Вы можете загрузить фото и один дополнительный короткий MP4 видео-тур.',
                     ),
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
@@ -843,6 +900,17 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
     }
     setState(() {
       _selectedImages.addAll(images.map((item) => File(item.path)));
+      _submitError = null;
+    });
+  }
+
+  Future<void> _pickVideo() async {
+    final picked = await _picker.pickVideo(source: ImageSource.gallery);
+    if (!mounted || picked == null) {
+      return;
+    }
+    setState(() {
+      _selectedVideo = File(picked.path);
       _submitError = null;
     });
   }
@@ -1108,11 +1176,15 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
       if (!mounted) {
         return;
       }
-      if (_selectedImages.isNotEmpty) {
-        await repository.uploadListingImages(
+      final uploads = <File>[
+        ..._selectedImages,
+        if (_selectedVideo != null) _selectedVideo!,
+      ];
+      if (uploads.isNotEmpty) {
+        await repository.uploadListingMedia(
           accessToken: accessToken,
           listingId: detail.publicId,
-          images: _selectedImages,
+          files: uploads,
         );
         if (!mounted) {
           return;

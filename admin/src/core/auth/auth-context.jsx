@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 
-import { apiRequest, isApiError } from '@/core/api/client';
+import { apiBlobRequest, apiRequest, isApiError } from '@/core/api/client';
 
 const AUTH_STORAGE_KEY = 'marketplace-admin-auth';
 
@@ -99,6 +99,12 @@ export function AuthProvider({ children }) {
           throw new Error('No active session.');
         }
         return apiRequest(path, { ...options, token: session.accessToken });
+      },
+      async authenticatedBlobRequest(path, options = {}) {
+        if (!session?.accessToken) {
+          throw new Error('No active session.');
+        }
+        return apiBlobRequest(path, { ...options, token: session.accessToken });
       },
     }),
     [currentUser, isBootstrapping, session],

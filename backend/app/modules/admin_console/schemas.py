@@ -167,6 +167,7 @@ class AdminMessageAttachmentReviewSchema(BaseModel):
     public_id: str
     file_name: str
     mime_type: str
+    download_url: str
 
 
 class AdminMessageReviewSchema(BaseModel):
