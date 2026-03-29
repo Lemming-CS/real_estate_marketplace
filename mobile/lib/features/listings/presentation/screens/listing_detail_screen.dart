@@ -29,6 +29,7 @@ class ListingDetailScreen extends ConsumerStatefulWidget {
 class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
   int _pageIndex = 0;
   bool _favoriteBusy = false;
+  bool _ownerActionBusy = false;
 
   @override
   Widget build(BuildContext context) {
@@ -280,6 +281,12 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
                             .push('/promote-listing/${listing.publicId}'),
                         child: Text(context.tr('Promote', 'Продвинуть')),
                       ),
+                    OutlinedButton(
+                      onPressed: _ownerActionBusy
+                          ? null
+                          : () => _deleteListing(authState, listing),
+                      child: Text(context.tr('Delete', 'Удалить')),
+                    ),
                   ],
                 ),
               ],
@@ -423,6 +430,71 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
       }
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(error.toString())));
+    }
+  }
+
+  Future<void> _deleteListing(AuthState authState, ListingDetail listing) async {
+    final session = authState.session;
+    if (session == null) {
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(context.tr('Delete listing?', 'Удалить объявление?')),
+        content: Text(
+          context.tr(
+            'This will remove the listing from the marketplace and favorites. Active promotions must be ended first.',
+            'Это уберет объявление из маркетплейса и избранного. Активные продвижения нужно завершить заранее.',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(context.tr('Cancel', 'Отмена')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(context.tr('Delete', 'Удалить')),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    setState(() => _ownerActionBusy = true);
+    final repository = ref.read(listingsRepositoryProvider);
+    try {
+      await repository.deleteListing(
+        accessToken: session.accessToken,
+        listingId: listing.publicId,
+      );
+      if (!mounted) {
+        return;
+      }
+      ref.invalidate(myListingsProvider);
+      ref.invalidate(homeListingsProvider);
+      ref.invalidate(favoritesProvider);
+      context.go('/my-listings');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            context.tr('Listing deleted.', 'Объявление удалено.'),
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.toString())));
+    } finally {
+      if (mounted) {
+        setState(() => _ownerActionBusy = false);
+      }
     }
   }
 }

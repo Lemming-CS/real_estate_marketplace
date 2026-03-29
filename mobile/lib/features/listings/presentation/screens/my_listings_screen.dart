@@ -74,30 +74,47 @@ class MyListingsScreen extends ConsumerWidget {
                   onSelected: (action) async {
                     final token = authState.session!.accessToken;
                     final repository = ref.read(listingsRepositoryProvider);
-                    if (action == 'edit') {
-                      context.push('/edit-listing/${listing.publicId}');
-                      return;
-                    }
-                    if (action == 'promote') {
-                      context.push('/promote-listing/${listing.publicId}');
-                      return;
-                    }
-                    if (action == 'publish') {
-                      await repository.publishListing(
-                          accessToken: token, listingId: listing.publicId);
-                    }
-                    if (action == 'archive') {
-                      await repository.archiveListing(
-                          accessToken: token, listingId: listing.publicId);
-                    }
-                    if (action == 'reactivate') {
-                      await repository.reactivateListing(
-                          accessToken: token, listingId: listing.publicId);
+                    switch (action) {
+                      case 'edit':
+                        context.push('/edit-listing/${listing.publicId}');
+                        return;
+                      case 'promote':
+                        context.push('/promote-listing/${listing.publicId}');
+                        return;
+                      case 'publish':
+                        await repository.publishListing(
+                          accessToken: token,
+                          listingId: listing.publicId,
+                        );
+                        break;
+                      case 'archive':
+                        await repository.archiveListing(
+                          accessToken: token,
+                          listingId: listing.publicId,
+                        );
+                        break;
+                      case 'reactivate':
+                        await repository.reactivateListing(
+                          accessToken: token,
+                          listingId: listing.publicId,
+                        );
+                        break;
+                      case 'delete':
+                        final confirmed = await _confirmDelete(context);
+                        if (confirmed != true || !context.mounted) {
+                          return;
+                        }
+                        await repository.deleteListing(
+                          accessToken: token,
+                          listingId: listing.publicId,
+                        );
+                        break;
                     }
                     if (!context.mounted) {
                       return;
                     }
                     ref.invalidate(myListingsProvider);
+                    ref.invalidate(homeListingsProvider);
                     ref.invalidate(listingDetailProvider(listing.publicId));
                   },
                   itemBuilder: (context) => [
@@ -124,6 +141,10 @@ class MyListingsScreen extends ConsumerWidget {
                           value: 'reactivate',
                           child:
                               Text(context.tr('Reactivate', 'Активировать'))),
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: Text(context.tr('Delete', 'Удалить')),
+                    ),
                   ],
                 ),
               );
@@ -132,6 +153,31 @@ class MyListingsScreen extends ConsumerWidget {
         },
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stackTrace) => Center(child: Text(error.toString())),
+      ),
+    );
+  }
+
+  Future<bool?> _confirmDelete(BuildContext context) {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(context.tr('Delete listing?', 'Удалить объявление?')),
+        content: Text(
+          context.tr(
+            'This will remove the listing from the marketplace and favorites. This action cannot be undone from the app.',
+            'Это уберет объявление из маркетплейса и избранного. Вернуть его из приложения будет нельзя.',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(context.tr('Cancel', 'Отмена')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(context.tr('Delete', 'Удалить')),
+          ),
+        ],
       ),
     );
   }

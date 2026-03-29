@@ -600,8 +600,8 @@ def test_discovery_search_filters_sort_pagination_and_public_owner_pages(test_en
             "city": "Bishkek",
             "purpose": "rent",
             "property_type": "apartment",
-            "min_price": "400",
-            "max_price": "950",
+            "min_price": "40000",
+            "max_price": "95000",
             "min_area_sqm": "50",
             "sort": "price_desc",
             "page": 1,
@@ -764,6 +764,79 @@ def test_favorites_add_remove_list_and_unavailable_listing_handling(test_environ
     assert remove_response.json()["is_favorited"] is False
 
 
+def test_owner_can_soft_delete_listing_and_deleted_listing_disappears_from_views(test_environment):
+    client = test_environment["client"]
+    session_factory = test_environment["session_factory"]
+
+    with session_factory() as session:
+        category = _create_category_with_attributes(session)
+        owner = _create_user(
+            session,
+            email="seller.delete@example.com",
+            username="seller_delete",
+            roles=[RoleCode.USER, RoleCode.SELLER],
+        )
+        other_user = _create_user(
+            session,
+            email="other.delete@example.com",
+            username="other_delete",
+            roles=[RoleCode.USER, RoleCode.SELLER],
+        )
+        buyer = _create_user(
+            session,
+            email="buyer.delete@example.com",
+            username="buyer_delete",
+            roles=[RoleCode.USER],
+        )
+        listing = _create_published_listing(
+            session,
+            seller=owner,
+            category=category,
+            title="Apartment that will be deleted",
+            description="Published apartment listing prepared for delete flow verification.",
+            price_amount="850.00",
+            city="Bishkek",
+            purpose=ListingPurpose.RENT,
+            property_type=PropertyType.APARTMENT,
+            bathrooms_value="1",
+            heating_option="central",
+        )
+
+    owner_headers = _auth_headers(
+        _access_token_for_user(owner, roles=[RoleCode.USER, RoleCode.SELLER])
+    )
+    other_headers = _auth_headers(
+        _access_token_for_user(other_user, roles=[RoleCode.USER, RoleCode.SELLER])
+    )
+    buyer_headers = _auth_headers(_access_token_for_user(buyer, roles=[RoleCode.USER]))
+
+    favorite_response = client.post(f"/api/v1/favorites/{listing.public_id}", headers=buyer_headers)
+    assert favorite_response.status_code == 201
+
+    forbidden_delete = client.delete(f"/api/v1/listings/{listing.public_id}", headers=other_headers)
+    assert forbidden_delete.status_code == 403
+
+    delete_response = client.delete(f"/api/v1/listings/{listing.public_id}", headers=owner_headers)
+    assert delete_response.status_code == 200
+    assert delete_response.json()["message"] == "Listing deleted successfully."
+
+    public_feed = client.get("/api/v1/listings")
+    assert public_feed.status_code == 200
+    assert all(item["public_id"] != listing.public_id for item in public_feed.json()["items"])
+
+    owner_listings = client.get("/api/v1/listings/me", headers=owner_headers)
+    assert owner_listings.status_code == 200
+    assert all(item["public_id"] != listing.public_id for item in owner_listings.json()["items"])
+
+    public_detail = client.get(f"/api/v1/listings/{listing.public_id}")
+    assert public_detail.status_code == 404
+
+    favorites_response = client.get("/api/v1/favorites", headers=buyer_headers)
+    assert favorites_response.status_code == 200
+    assert favorites_response.json()["meta"]["total_items"] == 0
+    assert favorites_response.json()["items"] == []
+
+
 def test_listing_counters_are_exposed_and_views_are_deduplicated_by_viewer(test_environment):
     client = test_environment["client"]
     session_factory = test_environment["session_factory"]
@@ -875,7 +948,7 @@ def test_listing_counters_are_exposed_and_views_are_deduplicated_by_viewer(test_
             session.query(ListingView)
             .filter(ListingView.listing_id == listing_row.id)
             .count()
-            == 3
+            == 4
         )
 
 

@@ -130,6 +130,12 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
             icon: const Icon(Icons.home_outlined),
             tooltip: context.tr('Home', 'Главная'),
           ),
+          if (isEditing)
+            IconButton(
+              onPressed: _isSubmitting ? null : () => _deleteListing(authState),
+              icon: const Icon(Icons.delete_outline),
+              tooltip: context.tr('Delete', 'Удалить'),
+            ),
           if (context.canPop())
             TextButton(
               onPressed: _isSubmitting ? null : () => context.pop(),
@@ -1206,6 +1212,73 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
       ref.invalidate(myListingsProvider);
       ref.invalidate(listingDetailProvider(detail.publicId));
       context.push('/listing/${detail.publicId}');
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _submitError = error.toString();
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
+  }
+
+  Future<void> _deleteListing(AuthState authState) async {
+    final listingId = widget.listingId;
+    final session = authState.session;
+    if (listingId == null || session == null) {
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(context.tr('Delete listing?', 'Удалить объявление?')),
+        content: Text(
+          context.tr(
+            'This will remove the listing from the marketplace and favorites. Active promotions must be ended first.',
+            'Это уберет объявление из маркетплейса и избранного. Активные продвижения нужно завершить заранее.',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(context.tr('Cancel', 'Отмена')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(context.tr('Delete', 'Удалить')),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = true;
+      _submitError = null;
+    });
+    final repository = ref.read(listingsRepositoryProvider);
+    try {
+      await repository.deleteListing(
+        accessToken: session.accessToken,
+        listingId: listingId,
+      );
+      if (!mounted) {
+        return;
+      }
+      ref.invalidate(homeListingsProvider);
+      ref.invalidate(myListingsProvider);
+      ref.invalidate(listingDetailProvider(listingId));
+      context.go('/my-listings');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(context.tr('Listing deleted.', 'Объявление удалено.')),
+        ),
+      );
     } catch (error) {
       if (mounted) {
         setState(() {

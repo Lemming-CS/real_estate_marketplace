@@ -5,7 +5,7 @@ from math import ceil
 from pathlib import Path
 
 from fastapi import UploadFile
-from sqlalchemy import Select, case, exists, func, or_, select
+from sqlalchemy import Select, case, delete, exists, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
@@ -363,6 +363,33 @@ def archive_listing(session: Session, *, listing_public_id: str, actor: User) ->
     listing.status = ListingStatus.ARCHIVED
     session.flush()
     return _build_listing_status_schema(listing)
+
+
+def delete_listing(
+    session: Session,
+    *,
+    settings: Settings,
+    listing_public_id: str,
+    actor: User,
+) -> None:
+    listing = _get_listing_or_404(session, listing_public_id=listing_public_id)
+    _ensure_listing_write_access(session, listing=listing, actor=actor)
+
+    if _has_active_promotion(session, listing=listing):
+        raise AppError(
+            status_code=409,
+            code="listing_has_active_promotion",
+            message="Active promotions must expire or be cancelled before deleting the listing.",
+        )
+
+    deleted_at = utcnow()
+    listing.deleted_at = deleted_at
+    for media in _active_media(listing):
+        media.deleted_at = deleted_at
+        delete_storage_key(settings=settings, storage_key=media.storage_key)
+
+    session.execute(delete(Favorite).where(Favorite.listing_id == listing.id))
+    session.flush()
 
 
 def deactivate_listing(session: Session, *, listing_public_id: str, actor: User) -> ListingStatusSchema:
@@ -1467,6 +1494,21 @@ def _active_promotion_map(session: Session, listing_ids: list[int]) -> dict[int,
     ).scalars().all()
     promoted_set = set(promoted_listing_ids)
     return {listing_id: listing_id in promoted_set for listing_id in listing_ids}
+
+
+def _has_active_promotion(session: Session, *, listing: Listing) -> bool:
+    now = utcnow()
+    return (
+        session.execute(
+            select(Promotion.id).where(
+                Promotion.listing_id == listing.id,
+                Promotion.status == PromotionStatus.ACTIVE,
+                or_(Promotion.starts_at.is_(None), Promotion.starts_at <= now),
+                or_(Promotion.ends_at.is_(None), Promotion.ends_at >= now),
+            )
+        ).scalar_one_or_none()
+        is not None
+    )
 
 
 def _active_promotion_state_map(

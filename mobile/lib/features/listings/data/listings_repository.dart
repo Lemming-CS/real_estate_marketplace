@@ -246,6 +246,16 @@ class ListingsRepository {
     );
   }
 
+  Future<void> deleteListing({
+    required String accessToken,
+    required String listingId,
+  }) async {
+    await _client.deleteJson(
+      ApiEndpoints.listingDetail(listingId),
+      accessToken: accessToken,
+    );
+  }
+
   Map<String, dynamic> _listingBody(ListingFormData data) {
     final attributeValues = <Map<String, dynamic>>[
       {

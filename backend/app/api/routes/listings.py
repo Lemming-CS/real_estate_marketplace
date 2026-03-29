@@ -27,6 +27,7 @@ from app.modules.listings.service import (
     archive_listing,
     create_listing,
     deactivate_listing,
+    delete_listing,
     delete_listing_media,
     get_listing_detail,
     list_owner_discovery_listings,
@@ -260,6 +261,27 @@ def archive_listing_endpoint(
     response = archive_listing(db, listing_public_id=listing_public_id, actor=current_user)
     db.commit()
     return response
+
+
+@router.delete(
+    "/{listing_public_id}",
+    response_model=MessageResponse,
+    summary="Soft-delete a listing owned by the authenticated user or by an admin",
+)
+def delete_listing_endpoint(
+    listing_public_id: str,
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+    current_user: User = Depends(require_account_status(UserStatus.ACTIVE)),
+) -> MessageResponse:
+    delete_listing(
+        db,
+        settings=settings,
+        listing_public_id=listing_public_id,
+        actor=current_user,
+    )
+    db.commit()
+    return MessageResponse(message="Listing deleted successfully.")
 
 
 @router.post(
