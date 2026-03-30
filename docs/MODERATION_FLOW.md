@@ -72,8 +72,6 @@ From a report workflow, admin can:
 - archive the listing
 - suspend the seller/user
 
-These actions are intentionally operational and explicit, not vague “approve/reject marketplace item” shortcuts.
-
 ## Listing Visibility Rules
 Public feeds and public detail show only:
 - `published` listings
@@ -100,7 +98,6 @@ Admin user detail shows:
 - latest status note
 - status history
 
-This makes moderation decisions explainable after the fact and satisfies the assignment’s need for auditable admin actions.
 
 ## Conversation Review
 Admins should not casually browse all private chats.

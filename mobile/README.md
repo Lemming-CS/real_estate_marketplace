@@ -14,5 +14,6 @@ Run locally:
 flutter pub get
 ./scripts/run_local.sh
 ```
+If app doesn't reach backend check the .env file
 
 The app reads `APP_NAME` and `API_BASE_URL` from `mobile/.env`.

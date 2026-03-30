@@ -37,5 +37,3 @@
 - Payment successful
 - Promotion activated
 - Promotion expired
-
-The implemented flows currently emit listing-review and new-message notifications directly. Payment and promotion notification helpers are available for the commerce flows that will be connected later.

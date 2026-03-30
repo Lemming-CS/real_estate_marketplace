@@ -10,6 +10,12 @@ Stack:
 - `admin/`: React + Vite + TanStack Query
 - `docs/`: architecture, API, DB, moderation, submission notes
 
+<video width="320" height="240" controls>
+  <source src="./docs/aitSolutionsClean.mp4" type="video/mp4">
+</video>
+
+5 minute video overview: [Video](./docs/aitSolutionsClean.mp4)
+
 ## What Is Implemented
 - JWT auth with refresh-token rotation, password reset, profile update, profile image upload
 - property categories with localization (`en`, `ru`) and dynamic attribute metadata
@@ -48,13 +54,7 @@ The final workflow is closer to a real marketplace:
 Detailed docs:
 - [Architecture](./docs/ARCHITECTURE.md)
 - [API Contract Overview](./docs/API_CONTRACT_OVERVIEW.md)
-- [Database Design](./docs/DB_DESIGN.md)
 - [Moderation Flow](./docs/MODERATION_FLOW.md)
-- [Implementation Plan](.docs/IMPLEMENTATION_PLAN.md)
-- [Screenshots Guide](./docs/SCREENSHOTS.md)
-- [Demo Video Checklist](./docs/DEMO_VIDEO_CHECKLIST.md)
-- [Submission Checklist](./docs/SUBMISSION_CHECKLIST.md)
-
 ## Repository Structure
 ```text
 .
@@ -129,6 +129,7 @@ uvicorn app.main:create_app --factory --reload --host 0.0.0.0 --port 8000
 
 Backend dependency note:
 - `pip install -e '.[dev]'` installs both runtime and development dependencies from `backend/pyproject.toml`
+- this already includes `cryptography`, so you do not need to install it separately unless your machine-specific Python environment has an extra issue
 
 ### 6. Run admin
 `node_modules` is local and ignored by Git, so each machine installs it after cloning:
@@ -144,6 +145,14 @@ One-time native bootstrap if platform folders are missing:
 cd mobile
 flutter create --platforms=android,ios .
 ```
+
+Then:
+```bash
+flutter pub get
+./scripts/run_local.sh
+```
+If flutter doesnt reach backend check the mobile/.env
+
 
 Flutter note:
 - packages are restored locally from `pubspec.yaml` and `pubspec.lock`
@@ -201,10 +210,10 @@ Seed photos are copied from `backend/app/db/seed_photos` into the actual media s
 - suspension reasons are stored in `user_status_history` and surfaced in admin detail
 
 ### Payments and promotions
-- promotion package -> promotion record -> payment record -> activation
+- promotion package -> promotion record -> payment record -> activation(by admin)
 - payments are modeled separately from promotions
 - active promotion state is exposed on listings
-- current checkout is mock/sandbox, which is acceptable for assignment MVP
+- current checkout is mock/sandbox
 
 ## API Summary
 Main route groups:
@@ -216,7 +225,7 @@ Main route groups:
 - payments and promotions
 - admin dashboard, users, listings, reports, payments, packages, promotions, audit logs, and scoped conversation review
 
-Full summary: [docs/API_CONTRACT_OVERVIEW.md](/home/lemming/Projects/marketplace-assignment/docs/API_CONTRACT_OVERVIEW.md)
+Full summary: [docs/API_CONTRACT_OVERVIEW.md](./docs/API_CONTRACT_OVERVIEW.md)
 
 ## Testing Status
 Backend coverage includes:
@@ -232,10 +241,6 @@ Flutter tests include:
 - listing form validation rules
 - listing filter query-param/state behavior
 
-## Screenshots And Demo Video
-- Screenshot instructions: [docs/SCREENSHOTS.md](/home/lemming/Projects/marketplace-assignment/docs/SCREENSHOTS.md)
-- Demo video checklist: [docs/DEMO_VIDEO_CHECKLIST.md](/home/lemming/Projects/marketplace-assignment/docs/DEMO_VIDEO_CHECKLIST.md)
-- Submission checklist: [docs/SUBMISSION_CHECKLIST.md](/home/lemming/Projects/marketplace-assignment/docs/SUBMISSION_CHECKLIST.md)
 
 ## Known Limitations
 - Mobile video playback is still lighter than photo UX; upload and indicators exist, but the experience is not yet as polished as image browsing.
@@ -261,4 +266,4 @@ Flutter tests include:
   - promotions
   - payments
   - audit logging
-- The product now clearly reads as a real-estate marketplace rather than a generic goods marketplace.
+  

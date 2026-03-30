@@ -21,15 +21,6 @@ Core product scope:
 - report-driven moderation
 - promotion packages and mock payment activation
 
-## Why This Architecture Fits The Assignment
-- One backend source of truth keeps auth, moderation, promotions, and listing state consistent.
-- Mobile and admin are intentionally separate apps, which demonstrates real multi-client integration.
-- Property workflows are explicit and interview-defensible:
-  - direct seller publication after validation
-  - reports as moderation intake
-  - admin visibility controls and suspension history
-  - promotions activated only after successful payment
-
 ## Repository Structure
 ```text
 .
@@ -219,8 +210,6 @@ Flow:
 3. payment starts in `pending`
 4. mock provider simulation marks payment `successful` or `failed`
 5. promotion activates only after successful payment
-
-This is easy to explain in interview terms because activation is not hidden behind a boolean flag.
 
 ## Promotion Activation Flow
 1. listing must be valid and promotable
