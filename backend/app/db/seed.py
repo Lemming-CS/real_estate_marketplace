@@ -267,6 +267,7 @@ def get_or_create_listing(
     purpose: ListingPurpose,
     property_type: PropertyType,
     price_amount: Decimal,
+    currency_code: str = "USD",
     item_condition: ListingCondition | None,
     status: ListingStatus,
     city: str,
@@ -295,6 +296,7 @@ def get_or_create_listing(
             purpose=purpose,
             property_type=property_type,
             price_amount=price_amount,
+            currency_code=currency_code,
             item_condition=item_condition,
             status=status,
             city=city,
@@ -321,6 +323,7 @@ def get_or_create_listing(
         listing.purpose = purpose
         listing.property_type = property_type
         listing.price_amount = price_amount
+        listing.currency_code = currency_code
         listing.item_condition = item_condition
         listing.status = status
         listing.city = city
@@ -961,6 +964,7 @@ def seed_demo_data() -> None:
             purpose=ListingPurpose.RENT,
             property_type=PropertyType.APARTMENT,
             price_amount=Decimal("850.00"),
+            currency_code="USD",
             item_condition=None,
             status=ListingStatus.PUBLISHED,
             city="Bishkek",
@@ -986,6 +990,7 @@ def seed_demo_data() -> None:
             purpose=ListingPurpose.SALE,
             property_type=PropertyType.HOUSE,
             price_amount=Decimal("185000.00"),
+            currency_code="USD",
             item_condition=None,
             status=ListingStatus.PUBLISHED,
             city="Bishkek",
@@ -1011,6 +1016,7 @@ def seed_demo_data() -> None:
             purpose=ListingPurpose.SALE,
             property_type=PropertyType.APARTMENT,
             price_amount=Decimal("38000.00"),
+            currency_code="USD",
             item_condition=None,
             status=ListingStatus.PUBLISHED,
             city="Bishkek",
@@ -1035,6 +1041,7 @@ def seed_demo_data() -> None:
             purpose=ListingPurpose.RENT,
             property_type=PropertyType.HOUSE,
             price_amount=Decimal("1400.00"),
+            currency_code="USD",
             item_condition=None,
             status=ListingStatus.DRAFT,
             city="Bishkek",
@@ -1059,6 +1066,7 @@ def seed_demo_data() -> None:
             purpose=ListingPurpose.RENT,
             property_type=PropertyType.APARTMENT,
             price_amount=Decimal("600.00"),
+            currency_code="USD",
             item_condition=None,
             status=ListingStatus.INACTIVE,
             city="Bishkek",

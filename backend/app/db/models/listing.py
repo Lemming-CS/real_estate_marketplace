@@ -191,5 +191,5 @@ def _sync_listing_normalized_price(_mapper, _connection, target: Listing) -> Non
     if target.currency_code:
         target.currency_code = target.currency_code.strip().upper()
     else:
-        target.currency_code = "KGS" 
+        target.currency_code = "USD"
     target.normalized_price_kgs = normalized_price_to_kgs(target.price_amount, target.currency_code)
