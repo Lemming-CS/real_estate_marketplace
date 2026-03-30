@@ -22,8 +22,6 @@ Stack:
 
 ## Assignment Alignment
 This submission is intentionally aligned to a real-estate marketplace instead of a generic marketplace:
-- listing purpose is `rent` or `sale`
-- property type is `apartment` or `house`
 - listings store city, district, address text, map label, latitude, longitude, rooms, area, floor, and furnishing data
 - property media supports photos and optional MP4 video tours
 - admin does not manually approve every new listing
@@ -37,10 +35,7 @@ The final workflow is closer to a real marketplace:
 - reports from users are the primary intake for moderation
 - admins can still hide, archive, reject, or manually review listings when needed
 
-This is easier to defend in interview terms because it separates:
-- product validation and publish rules
-- reactive moderation
-- operational controls
+
 
 ## Architecture Summary
 - FastAPI is the single source of truth for business rules and data integrity.
@@ -51,14 +46,14 @@ This is easier to defend in interview terms because it separates:
 - Moderation actions and user status changes are audited.
 
 Detailed docs:
-- [Architecture](/home/lemming/Projects/marketplace-assignment/docs/ARCHITECTURE.md)
-- [API Contract Overview](/home/lemming/Projects/marketplace-assignment/docs/API_CONTRACT_OVERVIEW.md)
-- [Database Design](/home/lemming/Projects/marketplace-assignment/docs/DB_DESIGN.md)
-- [Moderation Flow](/home/lemming/Projects/marketplace-assignment/docs/MODERATION_FLOW.md)
-- [Implementation Plan](/home/lemming/Projects/marketplace-assignment/docs/IMPLEMENTATION_PLAN.md)
-- [Screenshots Guide](/home/lemming/Projects/marketplace-assignment/docs/SCREENSHOTS.md)
-- [Demo Video Checklist](/home/lemming/Projects/marketplace-assignment/docs/DEMO_VIDEO_CHECKLIST.md)
-- [Submission Checklist](/home/lemming/Projects/marketplace-assignment/docs/SUBMISSION_CHECKLIST.md)
+- [Architecture](./docs/ARCHITECTURE.md)
+- [API Contract Overview](./docs/API_CONTRACT_OVERVIEW.md)
+- [Database Design](./docs/DB_DESIGN.md)
+- [Moderation Flow](./docs/MODERATION_FLOW.md)
+- [Implementation Plan](.docs/IMPLEMENTATION_PLAN.md)
+- [Screenshots Guide](./docs/SCREENSHOTS.md)
+- [Demo Video Checklist](./docs/DEMO_VIDEO_CHECKLIST.md)
+- [Submission Checklist](./docs/SUBMISSION_CHECKLIST.md)
 
 ## Repository Structure
 ```text
@@ -92,42 +87,11 @@ cp admin/.env.example admin/.env
 cp mobile/.env.example mobile/.env
 ```
 
-### 2. Fast bootstrap option
-```bash
-./scripts/bootstrap_local.sh
-```
-
-This script:
-- creates missing env files
-- creates `backend/.venv` if needed
-- installs backend dependencies
-- installs admin dependencies
-- runs `flutter pub get` if Flutter is installed
-- starts `mysql` and `mailhog` if Docker is available
-
-### 3. Start shared local services manually if needed
+### 2. Start shared local services manually if needed
 ```bash
 docker compose up -d mysql mailhog
 ```
-
-### 4. Run migrations and seed demo data
-Linux / macOS:
-```bash
-cd backend
-source .venv/bin/activate
-alembic upgrade head
-python -m app.db.seed
-```
-
-Windows PowerShell:
-```powershell
-cd backend
-.\.venv\Scripts\Activate.ps1
-alembic upgrade head
-python -m app.db.seed
-```
-
-### 5. Run backend
+### 3. Configure backend
 Linux / macOS:
 ```bash
 cd backend
@@ -135,9 +99,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -e '.[dev]'
-uvicorn app.main:create_app --factory --reload --host 0.0.0.0 --port 8000
 ```
-
 Windows PowerShell:
 ```powershell
 cd backend
@@ -145,24 +107,35 @@ py -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 python -m pip install -e '.[dev]'
+```
+
+### 4. Run migrations and seed demo data
+Linux / macOS:
+```bash
+alembic upgrade head
+python -m app.db.seed
+```
+
+Windows PowerShell:
+```powershell
+alembic upgrade head
+python -m app.db.seed
+```
+
+### 5. Run backend
+```
 uvicorn app.main:create_app --factory --reload --host 0.0.0.0 --port 8000
 ```
 
 Backend dependency note:
 - `pip install -e '.[dev]'` installs both runtime and development dependencies from `backend/pyproject.toml`
-- this already includes `cryptography`, so you do not need to install it separately unless your machine-specific Python environment has an extra issue
 
 ### 6. Run admin
 `node_modules` is local and ignored by Git, so each machine installs it after cloning:
 ```bash
 cd admin
-npm run dev -- --host 0.0.0.0 --port 5173
-```
-
-If dependencies are not installed yet:
-```bash
-cd admin
 npm install
+npm run dev -- --host 0.0.0.0 --port 5173
 ```
 
 ### 7. Run Flutter mobile
@@ -170,13 +143,6 @@ One-time native bootstrap if platform folders are missing:
 ```bash
 cd mobile
 flutter create --platforms=android,ios .
-```
-
-Then:
-```bash
-cd mobile
-flutter pub get
-./scripts/run_local.sh
 ```
 
 Flutter note:
