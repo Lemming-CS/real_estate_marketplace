@@ -10,11 +10,12 @@ Stack:
 - `admin/`: React + Vite + TanStack Query
 - `docs/`: architecture, API, DB, moderation, submission notes
 
-<video width="320" height="240" controls>
+<video width="640" height="360" controls>
   <source src="./docs/aitSolutionsClean.mp4" type="video/mp4">
 </video>
 
-5 minute video overview: [Video](./docs/aitSolutionsClean.mp4)
+### 5 minute video overview: 
+- [Video Link](./docs/aitSolutionsClean.mp4)
 
 ## What Is Implemented
 - JWT auth with refresh-token rotation, password reset, profile update, profile image upload
@@ -151,7 +152,7 @@ Then:
 flutter pub get
 ./scripts/run_local.sh
 ```
-If flutter doesnt reach backend check the mobile/.env
+### If flutter doesnt reach backend check the mobile/.env !!!
 
 
 Flutter note:

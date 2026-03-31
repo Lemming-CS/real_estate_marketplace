@@ -300,6 +300,34 @@ def test_admin_category_crud_and_public_localization(test_environment):
     assert all(category["slug"] != "commercial-properties" for category in public_after_delete.json())
 
 
+def test_admin_cannot_suspend_self(test_environment):
+    client = test_environment["client"]
+    session_factory = test_environment["session_factory"]
+
+    with session_factory() as session:
+        admin = _create_user(
+            session,
+            email="admin.self.block@example.com",
+            username="admin_self_block",
+            roles=[RoleCode.ADMIN, RoleCode.USER],
+        )
+
+    admin_headers = _auth_headers(_access_token_for_user(admin, roles=[RoleCode.ADMIN, RoleCode.USER]))
+
+    response = client.post(
+        f"/api/v1/admin/users/{admin.public_id}/status",
+        headers=admin_headers,
+        json={"action": "suspend", "reason": "Trying to suspend self should fail."},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "cannot_suspend_self"
+
+    with session_factory() as session:
+        refreshed_admin = session.query(User).filter(User.public_id == admin.public_id).one()
+        assert refreshed_admin.status == UserStatus.ACTIVE
+
+
 def test_listing_crud_moderation_and_public_visibility(test_environment):
     client = test_environment["client"]
     session_factory = test_environment["session_factory"]

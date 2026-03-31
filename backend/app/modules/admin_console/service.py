@@ -227,6 +227,12 @@ def update_admin_user_status(
     user_agent: str | None = None,
 ) -> AdminUserDetailSchema:
     user = _get_user_or_404(session, user_public_id=user_public_id)
+    if payload.action == "suspend" and user.id == actor.id:
+        raise AppError(
+            status_code=400,
+            code="cannot_suspend_self",
+            message="Admins cannot suspend their own account.",
+        )
     previous_status = user.status
     next_status = UserStatus.SUSPENDED if payload.action == "suspend" else UserStatus.ACTIVE
     user.status = next_status

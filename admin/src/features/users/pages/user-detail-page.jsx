@@ -33,6 +33,7 @@ export function UserDetailPage() {
   });
 
   const user = detailQuery.data;
+  const isViewingSelf = Boolean(auth.currentUser && user && auth.currentUser.public_id === user.public_id);
 
   return (
     <section className="page-section">
@@ -58,11 +59,14 @@ export function UserDetailPage() {
                   <button className="secondary-button" type="button" onClick={() => statusMutation.mutate({ action: 'unsuspend' })}>
                     Unsuspend
                   </button>
-                ) : (
+                ) : !isViewingSelf ? (
                   <button className="danger-button" type="button" onClick={() => statusMutation.mutate({ action: 'suspend' })}>
                     Suspend
                   </button>
-                )}
+                ) : null}
+                {isViewingSelf ? (
+                  <span className="page-copy">You cannot suspend your own admin account.</span>
+                ) : null}
               </div>
             </header>
 

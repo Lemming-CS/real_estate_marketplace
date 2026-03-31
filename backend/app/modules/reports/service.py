@@ -343,6 +343,12 @@ def _apply_user_action_from_report(
     reported_user = report.reported_user
     previous_status = reported_user.status
     if user_action == "suspend":
+        if reported_user.id == actor.id:
+            raise AppError(
+                status_code=400,
+                code="cannot_suspend_self",
+                message="Admins cannot suspend their own account.",
+            )
         reported_user.status = UserStatus.SUSPENDED
         session.add(
             UserStatusHistory(
