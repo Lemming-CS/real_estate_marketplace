@@ -10,12 +10,6 @@ Stack:
 - `admin/`: React + Vite + TanStack Query
 - `docs/`: architecture, API, DB, moderation, submission notes
 
-<video width="640" height="360" controls>
-  <source src="./docs/aitSolutionsClean.mp4" type="video/mp4">
-</video>
-
-### 5 minute video overview: 
-- [Video Link](./docs/aitSolutionsClean.mp4)
 
 ## What Is Implemented
 - JWT auth with refresh-token rotation, password reset, profile update, profile image upload
@@ -150,7 +144,7 @@ flutter create --platforms=android,ios .
 Then:
 ```bash
 flutter pub get
-./scripts/run_local.sh
+flutter run --profile
 ```
 ### If flutter doesnt reach backend check the mobile/.env !!!
 
@@ -257,14 +251,3 @@ Flutter tests include:
 - CI pipelines and deployment automation
 - S3/MinIO storage adapter for production-style object storage
 - stronger admin analytics and moderation dashboards
-
-## Submission Quality Notes
-- No secrets are committed; env files are examples only.
-- The system is explainable in interview terms because domain boundaries are explicit:
-  - listings
-  - messaging
-  - moderation
-  - promotions
-  - payments
-  - audit logging
-  
