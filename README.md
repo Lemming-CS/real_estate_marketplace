@@ -105,14 +105,8 @@ python -m pip install -e '.[dev]'
 ```
 
 ### 4. Run migrations and seed demo data
-Linux / macOS:
-```bash
-alembic upgrade head
-python -m app.db.seed
-```
 
-Windows PowerShell:
-```powershell
+```bash
 alembic upgrade head
 python -m app.db.seed
 ```
@@ -128,6 +122,7 @@ Backend dependency note:
 
 ### 6. Run admin
 `node_modules` is local and ignored by Git, so each machine installs it after cloning:
+(From root)
 ```bash
 cd admin
 npm install
@@ -136,6 +131,7 @@ npm run dev -- --host 0.0.0.0 --port 5173
 
 ### 7. Run Flutter mobile
 One-time native bootstrap if platform folders are missing:
+(From root)
 ```bash
 cd mobile
 flutter create --platforms=android,ios .
