@@ -2,6 +2,15 @@
 
 Production-style full-stack marketplace for renting and buying apartments and houses.
 
+## Screenshots
+
+<img src="./docs/screenshots/Home.jpg" width="300" alt="Mobile home feed">
+<img src="./docs/screenshots/ListingDetailsTop.jpg" width="300" alt="Listing detail top section">
+<img src="./docs/screenshots/ListingDetailsBottom.jpg" width="300" alt="Listing detail bottom section">
+<img src="./docs/screenshots/Messages.jpg" width="300" alt="Messages screen">
+<img src="./docs/screenshots/CreateListing.jpg" width="300" alt="Create listing form">
+<img src="./docs/screenshots/AdminPanel.png" alt="Admin dashboard">
+
 **Stack**
 
 - `backend/`: FastAPI + SQLAlchemy + Alembic + MySQL
