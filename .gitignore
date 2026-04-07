@@ -12,6 +12,7 @@ backend/.coverage
 backend/htmlcov/
 backend/dist/
 backend/build/
+backend/uploads/
 backend/*.egg-info/
 __pycache__/
 *.pyc
