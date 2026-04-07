@@ -13,6 +13,7 @@ Production-style full-stack marketplace for renting and buying apartments and ho
 <p>
     <img src="./docs/screenshots/Messages.jpg" width="270" alt="Messages screen">
     <img src="./docs/screenshots/CreateListing.jpg" width="270" alt="Create listing form">
+    <img src="./docs/screenshots/Profile.jpg" width="270" alt="User profile screen">
 </p>
 
 ## Admin Screenshot
