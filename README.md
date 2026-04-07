@@ -196,6 +196,18 @@ Seed photos are copied from `backend/app/db/seed_photos` into the actual media s
 
 ## Maps, Media, Moderation, and Payments
 
+### Listing counters
+
+- `favorites_count` is exposed in listing feed responses and listing detail responses.
+- the favorite count is the number of persisted favorite records for that listing.
+- adding the same listing to favorites twice is idempotent and does not double-count.
+- `view_count` is exposed in listing feed responses and listing detail responses.
+- the view count increments only from listing detail views, not from loading the feed.
+- seller self-views do not increment the counter.
+- authenticated viewers are deduplicated per user for 24 hours.
+- guest viewers are deduplicated for 24 hours by `X-Guest-Token`.
+- anonymous detail requests without auth and without `X-Guest-Token` do not increment the counter.
+
 ### Maps
 
 - listings store exact coordinates
