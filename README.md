@@ -5,14 +5,14 @@ Production-style full-stack marketplace for renting and buying apartments and ho
 ## Mobile Screenshots
 
 <p>
-    <img src="./docs/screenshots/Home.jpg" width="300" alt="Mobile home feed">
-    <img src="./docs/screenshots/ListingDetailsTop.jpg" width="300" alt="Listing detail top">
-    <img src="./docs/screenshots/ListingDetailsBottom.jpg" width="300" alt="Listing detail bottom">
+    <img src="./docs/screenshots/Home.jpg" width="270" alt="Mobile home feed">
+    <img src="./docs/screenshots/ListingDetailsTop.jpg" width="270" alt="Listing detail top">
+    <img src="./docs/screenshots/ListingDetailsBottom.jpg" width="270" alt="Listing detail bottom">
 </p>
 
 <p>
-    <img src="./docs/screenshots/Messages.jpg" width="300" alt="Messages screen">
-    <img src="./docs/screenshots/CreateListing.jpg" width="300" alt="Create listing form">
+    <img src="./docs/screenshots/Messages.jpg" width="270" alt="Messages screen">
+    <img src="./docs/screenshots/CreateListing.jpg" width="270" alt="Create listing form">
 </p>
 
 ## Admin Screenshot
